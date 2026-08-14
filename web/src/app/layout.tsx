@@ -25,8 +25,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       className={`${inter.variable} ${plexMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-surface text-ink">
+      <body
+        className="min-h-full flex flex-col bg-surface text-ink"
+        suppressHydrationWarning
+      >
         {children}
       </body>
     </html>

@@ -1,0 +1,5 @@
+node_modules/
+.DS_Store
+
+# Personal Claude Code permission state, not project config
+.claude/settings.local.json

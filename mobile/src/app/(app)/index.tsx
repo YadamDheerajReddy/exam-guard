@@ -6,35 +6,76 @@ import { supabase } from "@/lib/supabase";
 import { Colors, Radius } from "@/constants/theme";
 
 type Invigilator = { full_name: string; assigned_hall_id: string | null };
+type LookupState =
+  | { status: "loading" }
+  | { status: "ready"; invigilator: Invigilator }
+  | { status: "not-invigilator" }
+  | { status: "error"; message: string };
 
 export default function HomeScreen() {
   const { session, signOut } = useSession();
-  const [invigilator, setInvigilator] = useState<Invigilator | null>(null);
-  const [checked, setChecked] = useState(false);
+  const [lookup, setLookup] = useState<LookupState>({ status: "loading" });
 
   useEffect(() => {
     if (!session) return;
+
+    setLookup({ status: "loading" });
 
     supabase
       .from("invigilators")
       .select("full_name, assigned_hall_id")
       .eq("id", session.user.id)
       .maybeSingle()
-      .then(({ data }) => {
-        if (!data) {
-          // Signed in, but no invigilators row for this account.
-          signOut();
+      .then(({ data, error }) => {
+        if (error) {
+          setLookup({ status: "error", message: error.message });
           return;
         }
-        setInvigilator(data);
-        setChecked(true);
+        if (!data) {
+          setLookup({ status: "not-invigilator" });
+          return;
+        }
+        setLookup({ status: "ready", invigilator: data });
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
-  if (!checked || !invigilator) {
+  if (lookup.status === "loading") {
     return null;
   }
+
+  if (lookup.status === "not-invigilator") {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.centerCard}>
+          <Text style={styles.title}>Not an invigilator account</Text>
+          <Text style={styles.subtitle}>
+            {session?.user.email} signed in successfully, but there&apos;s no
+            matching row in the invigilators table. Ask an admin to add one,
+            or sign out and use an invigilator account instead.
+          </Text>
+          <TouchableOpacity style={styles.button} onPress={() => signOut()}>
+            <Text style={styles.buttonText}>Sign out</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (lookup.status === "error") {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.centerCard}>
+          <Text style={styles.title}>Couldn&apos;t load your profile</Text>
+          <Text style={styles.subtitle}>{lookup.message}</Text>
+          <TouchableOpacity style={styles.button} onPress={() => signOut()}>
+            <Text style={styles.buttonText}>Sign out</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const { invigilator } = lookup;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -108,5 +149,23 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 14,
     color: Colors.slate,
+  },
+  centerCard: {
+    flex: 1,
+    justifyContent: "center",
+    gap: 12,
+  },
+  button: {
+    marginTop: 12,
+    alignSelf: "flex-start",
+    backgroundColor: Colors.accent,
+    borderRadius: Radius,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  buttonText: {
+    color: Colors.white,
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

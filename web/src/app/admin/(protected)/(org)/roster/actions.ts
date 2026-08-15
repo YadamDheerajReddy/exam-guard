@@ -37,6 +37,13 @@ export async function uploadRoster(
 
   const service = createAdminClient();
 
+  const { data: org } = await service
+    .from("organizations")
+    .select("slug")
+    .eq("id", admin.organizationId)
+    .single();
+  const orgSlug = org!.slug;
+
   // Two separate .in() lookups rather than one hand-built .or() filter
   // string — roll numbers/emails come straight from an uploaded CSV, and
   // interpolating untrusted values into a raw PostgREST filter string is
@@ -74,7 +81,7 @@ export async function uploadRoster(
       continue;
     }
 
-    const created = await createAuthUser(rollNumberToAuthEmail(row.rollNumber));
+    const created = await createAuthUser(rollNumberToAuthEmail(orgSlug, row.rollNumber));
     if (!created.ok) {
       results.push({ rowNumber: row.rowNumber, ok: false, error: created.error });
       continue;

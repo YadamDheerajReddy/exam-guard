@@ -10,16 +10,17 @@ export async function studentLogin(
   _prevState: StudentLoginState,
   formData: FormData,
 ): Promise<StudentLoginState> {
+  const institutionCode = String(formData.get("institutionCode") ?? "").trim();
   const rollNumber = String(formData.get("rollNumber") ?? "").trim();
   const password = String(formData.get("password") ?? "");
 
-  if (!rollNumber || !password) {
-    return { error: "Enter your roll number and password." };
+  if (!institutionCode || !rollNumber || !password) {
+    return { error: "Enter your institution code, roll number, and password." };
   }
 
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({
-    email: rollNumberToAuthEmail(rollNumber),
+    email: rollNumberToAuthEmail(institutionCode, rollNumber),
     password,
   });
 

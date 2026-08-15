@@ -1,9 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { randomBytes } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createAuthUser, deleteAuthUser } from "@/lib/create-auth-account";
 import { requireSuperAdmin } from "@/lib/admin-context";
+import { slugify } from "@/lib/student-auth";
 
 const ORG_TYPES = ["COLLEGE", "UNIVERSITY", "SCHOOL", "OTHER"] as const;
 
@@ -34,11 +36,29 @@ export async function createOrganizationWithAdmin(
 
   const service = createAdminClient();
 
-  const { data: org, error: orgError } = await service
-    .from("organizations")
-    .insert({ name: orgName, type: orgType })
-    .select("id")
-    .single();
+  // Roll numbers are only unique within an org, so the org's slug has to be
+  // part of every student's synthetic auth email to keep those globally
+  // unique — retry with a short random suffix if the base slug collides.
+  const baseSlug = slugify(orgName) || "org";
+  let org: { id: string } | null = null;
+  let orgError: { message: string } | null = null;
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const slug = attempt === 0 ? baseSlug : `${baseSlug}-${randomBytes(3).toString("hex")}`;
+    const { data, error } = await service
+      .from("organizations")
+      .insert({ name: orgName, type: orgType, slug })
+      .select("id")
+      .single();
+
+    if (!error) {
+      org = data;
+      orgError = null;
+      break;
+    }
+    orgError = error;
+    if (error.code !== "23505") break;
+  }
 
   if (orgError || !org) {
     return { error: orgError?.message ?? "Could not create organization." };

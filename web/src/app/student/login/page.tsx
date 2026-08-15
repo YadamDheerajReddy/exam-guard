@@ -11,10 +11,25 @@ export default function StudentLoginPage() {
       <div className="w-full max-w-sm rounded-lg border border-border bg-white p-8 shadow-sm">
         <h1 className="text-xl font-bold text-ink">Student Portal</h1>
         <p className="mt-1 text-sm text-slate">
-          Sign in with your roll number.
+          Sign in with your institution code and roll number.
         </p>
 
         <form action={formAction} className="mt-6 flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="institutionCode" className="text-sm font-semibold text-charcoal">
+              Institution Code
+            </label>
+            <input
+              id="institutionCode"
+              name="institutionCode"
+              type="text"
+              required
+              autoComplete="organization"
+              placeholder="Provided by your institution"
+              className="rounded-lg border border-border px-4 py-3 font-mono text-sm text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint"
+            />
+          </div>
+
           <div className="flex flex-col gap-1.5">
             <label htmlFor="rollNumber" className="text-sm font-semibold text-charcoal">
               Roll Number

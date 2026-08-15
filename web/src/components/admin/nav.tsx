@@ -8,6 +8,7 @@ const links = [
   { href: "/admin/roster", label: "Roster Upload" },
   { href: "/admin/halls", label: "Halls" },
   { href: "/admin/exams", label: "Exams" },
+  { href: "/admin/invigilators", label: "Invigilators" },
 ];
 
 export function AdminNav() {

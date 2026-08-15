@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createMappings, type MappingAssignment } from "@/app/admin/(protected)/exams/[examId]/mapping/actions";
+import { createMappings, type MappingAssignment } from "@/app/admin/(protected)/(org)/exams/[examId]/mapping/actions";
 
 type Hall = {
   id: string;

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { requireOrgAdmin } from "@/lib/admin-context";
 
 export type ExamFormState = { error?: string } | undefined;
 
@@ -32,6 +33,7 @@ export async function createExam(
     return { error: "Reveal threshold must be a non-negative number of minutes." };
   }
 
+  const admin = await requireOrgAdmin();
   const supabase = await createClient();
   const { error } = await supabase.from("exams").insert({
     course_code: courseCode,
@@ -40,6 +42,7 @@ export async function createExam(
     start_time: startTime,
     end_time: endTime,
     reveal_threshold_minutes: revealThresholdMinutes,
+    organization_id: admin.organizationId,
   });
 
   if (error) {

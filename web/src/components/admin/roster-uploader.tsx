@@ -3,7 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import Papa from "papaparse";
 import { normalizeHeader, validateRosterRows, type RosterRow } from "@/lib/roster";
-import { uploadRoster, type RosterUploadResult } from "@/app/admin/(protected)/roster/actions";
+import { uploadRoster, type RosterUploadResult } from "@/app/admin/(protected)/(org)/roster/actions";
 
 type Status = "invalid" | "valid" | "created" | "server-error";
 type Row = RosterRow & { rowNumber: number; status: Status; error: string | null };

@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { createHall, deleteHall, updateHall, type HallFormState } from "@/app/admin/(protected)/halls/actions";
+import { createHall, deleteHall, updateHall, type HallFormState } from "@/app/admin/(protected)/(org)/halls/actions";
 
 type Hall = {
   id: string;

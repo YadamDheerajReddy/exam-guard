@@ -1,9 +1,9 @@
 "use server";
 
-import { randomBytes } from "node:crypto";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createAuthUser, deleteAuthUser } from "@/lib/create-auth-account";
 import { rollNumberToAuthEmail } from "@/lib/student-auth";
+import { requireOrgAdmin } from "@/lib/admin-context";
 import { validateRosterRows, type RosterRow } from "@/lib/roster";
 
 export type RosterUploadResult = {
@@ -15,29 +15,10 @@ export type RosterUploadResult = {
 
 type IncomingRow = RosterRow & { rowNumber: number };
 
-function generateTempPassword() {
-  return randomBytes(9).toString("base64url");
-}
-
-async function assertIsAdmin() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not signed in.");
-
-  const { data: admin } = await supabase
-    .from("admins")
-    .select("id")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (!admin) throw new Error("Not authorized.");
-}
-
 export async function uploadRoster(
   rows: IncomingRow[],
 ): Promise<RosterUploadResult[]> {
-  await assertIsAdmin();
+  const admin = await requireOrgAdmin();
 
   if (rows.length === 0) return [];
 
@@ -54,17 +35,22 @@ export async function uploadRoster(
 
   if (clean.length === 0) return results;
 
-  const admin = createAdminClient();
+  const service = createAdminClient();
 
   // Two separate .in() lookups rather than one hand-built .or() filter
   // string — roll numbers/emails come straight from an uploaded CSV, and
   // interpolating untrusted values into a raw PostgREST filter string is
   // an injection risk if a cell contains a comma, paren, or quote.
+  // Roll number is only unique within this org; email is unique platform-wide.
   const rollNumbers = clean.map((r) => r.rollNumber);
   const emails = clean.map((r) => r.email);
   const [{ data: existingByRoll }, { data: existingByEmail }] = await Promise.all([
-    admin.from("students").select("roll_number").in("roll_number", rollNumbers),
-    admin.from("students").select("email").in("email", emails),
+    service
+      .from("students")
+      .select("roll_number")
+      .eq("organization_id", admin.organizationId)
+      .in("roll_number", rollNumbers),
+    service.from("students").select("email").in("email", emails),
   ]);
 
   const existingRolls = new Set(existingByRoll?.map((r) => r.roll_number) ?? []);
@@ -88,33 +74,24 @@ export async function uploadRoster(
       continue;
     }
 
-    const tempPassword = generateTempPassword();
-    const { data: created, error: createError } = await admin.auth.admin.createUser({
-      email: rollNumberToAuthEmail(row.rollNumber),
-      password: tempPassword,
-      email_confirm: true,
-    });
-
-    if (createError || !created.user) {
-      results.push({
-        rowNumber: row.rowNumber,
-        ok: false,
-        error: createError?.message ?? "Could not create account.",
-      });
+    const created = await createAuthUser(rollNumberToAuthEmail(row.rollNumber));
+    if (!created.ok) {
+      results.push({ rowNumber: row.rowNumber, ok: false, error: created.error });
       continue;
     }
 
-    const { error: insertError } = await admin.from("students").insert({
-      id: created.user.id,
+    const { error: insertError } = await service.from("students").insert({
+      id: created.userId,
       roll_number: row.rollNumber,
       full_name: row.fullName,
       email: row.email,
       department: row.department,
       photo_url: row.photoUrl || "",
+      organization_id: admin.organizationId,
     });
 
     if (insertError) {
-      await admin.auth.admin.deleteUser(created.user.id);
+      await deleteAuthUser(created.userId);
       results.push({
         rowNumber: row.rowNumber,
         ok: false,
@@ -123,7 +100,7 @@ export async function uploadRoster(
       continue;
     }
 
-    results.push({ rowNumber: row.rowNumber, ok: true, tempPassword });
+    results.push({ rowNumber: row.rowNumber, ok: true, tempPassword: created.tempPassword });
   }
 
   return results;

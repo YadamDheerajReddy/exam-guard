@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { requireOrgAdmin } from "@/lib/admin-context";
 
 export type HallFormState = { error?: string } | undefined;
 
@@ -36,12 +37,14 @@ export async function createHall(
   const parsed = parseHallForm(formData);
   if ("error" in parsed) return parsed;
 
+  const admin = await requireOrgAdmin();
   const supabase = await createClient();
   const { error } = await supabase.from("halls").insert({
     building_name: parsed.buildingName,
     room_number: parsed.roomNumber,
     floor_level: parsed.floorLevel,
     capacity: parsed.capacity,
+    organization_id: admin.organizationId,
   });
 
   if (error) {

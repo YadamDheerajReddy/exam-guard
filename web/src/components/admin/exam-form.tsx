@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
-import { createExam } from "@/app/admin/(protected)/exams/actions";
+import { createExam } from "@/app/admin/(protected)/(org)/exams/actions";
 
 function revealPreview(examDate: string, startTime: string, thresholdMinutes: number) {
   if (!examDate || !startTime || !Number.isFinite(thresholdMinutes)) return null;

@@ -3,10 +3,16 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import Papa from "papaparse";
 import { normalizeHeader, validateRosterRows, type RosterRow } from "@/lib/roster";
-import { uploadRoster, uploadStudentPhoto } from "@/app/admin/(protected)/(org)/roster/actions";
+import {
+  searchExistingStudents,
+  uploadRoster,
+  uploadStudentPhoto,
+  type ExistingStudentSearchResult,
+} from "@/app/admin/(protected)/(org)/roster/actions";
 
 type Submission =
   | { status: "created"; tempPassword: string; studentId: string }
+  | { status: "attached"; studentId: string }
   | { status: "server-error"; error: string };
 
 type PhotoState =
@@ -14,7 +20,12 @@ type PhotoState =
   | { status: "uploaded"; signedUrl: string }
   | { status: "error"; error: string };
 
-type Entry = { id: number; row: RosterRow };
+type Entry = {
+  id: number;
+  row: RosterRow;
+  kind: "new" | "existing";
+  existingStudentId?: string;
+};
 
 const REQUIRED_COLUMNS: (keyof RosterRow)[] = ["rollNumber", "fullName", "email", "department"];
 
@@ -33,14 +44,25 @@ export function RosterUploader() {
   const [parseError, setParseError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [manualRow, setManualRow] = useState<RosterRow>(emptyRow());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<ExistingStudentSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
   const [pending, startTransition] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const nextId = useRef(1);
 
-  const validated = useMemo(
-    () => validateRosterRows(entries.map((e) => e.row)),
-    [entries],
-  );
+  // Existing entries are already-valid DB records being attached to a new
+  // batch, not new accounts to create — running them through the CSV/manual
+  // validator would wrongly flag them (e.g. "Missing email", since the
+  // search result never carried an email to begin with).
+  const validated = useMemo(() => {
+    const newRows = entries.filter((e) => e.kind === "new").map((e) => e.row);
+    const newValidated = validateRosterRows(newRows);
+    let i = 0;
+    return entries.map((e) =>
+      e.kind === "existing" ? { ...e.row, error: null } : newValidated[i++],
+    );
+  }, [entries]);
 
   const rows = entries.map((entry, i) => ({
     entry,
@@ -49,13 +71,18 @@ export function RosterUploader() {
   }));
 
   const uploadable = rows.filter((r) => !r.error && !r.submission);
-  const createdCount = rows.filter((r) => r.submission?.status === "created").length;
+  const createdCount = rows.filter(
+    (r) => r.submission?.status === "created" || r.submission?.status === "attached",
+  ).length;
   const failedCount = rows.filter((r) => r.error || r.submission?.status === "server-error").length;
+  const alreadyInRoster = new Set(
+    entries.filter((e) => e.kind === "existing").map((e) => e.existingStudentId),
+  );
 
   function addEntries(newRows: RosterRow[]) {
     setEntries((prev) => [
       ...prev,
-      ...newRows.map((row) => ({ id: nextId.current++, row })),
+      ...newRows.map((row) => ({ id: nextId.current++, row, kind: "new" as const })),
     ]);
   }
 
@@ -108,6 +135,39 @@ export function RosterUploader() {
     setManualRow(emptyRow());
   }
 
+  function handleSearch() {
+    const query = searchQuery.trim();
+    if (!query) return;
+    setSearching(true);
+    startTransition(async () => {
+      try {
+        const results = await searchExistingStudents(query);
+        setSearchResults(results);
+      } finally {
+        setSearching(false);
+      }
+    });
+  }
+
+  function addExistingStudent(student: ExistingStudentSearchResult) {
+    if (alreadyInRoster.has(student.id)) return;
+    setEntries((prev) => [
+      ...prev,
+      {
+        id: nextId.current++,
+        kind: "existing",
+        existingStudentId: student.id,
+        row: {
+          rollNumber: student.rollNumber,
+          fullName: student.fullName,
+          email: "",
+          department: student.department,
+          photoUrl: "",
+        },
+      },
+    ]);
+  }
+
   function removeEntry(id: number) {
     setEntries((prev) => prev.filter((e) => e.id !== id));
     setSubmissions((prev) => {
@@ -125,14 +185,18 @@ export function RosterUploader() {
 
   function handleUpload() {
     setUploadError(null);
-    const batch = uploadable.map((r) => ({ rowNumber: r.entry.id, ...r.entry.row }));
+    const newBatch = uploadable
+      .filter((r) => r.entry.kind === "new")
+      .map((r) => ({ rowNumber: r.entry.id, ...r.entry.row }));
+    const existingEntries = uploadable.filter((r) => r.entry.kind === "existing");
+    const existingIds = existingEntries.map((r) => r.entry.existingStudentId!);
 
     startTransition(async () => {
       try {
-        const results = await uploadRoster(batch);
+        const { rowResults } = await uploadRoster(newBatch, existingIds);
         setSubmissions((prev) => {
           const next = new Map(prev);
-          for (const result of results) {
+          for (const result of rowResults) {
             next.set(
               result.rowNumber,
               result.ok
@@ -143,6 +207,9 @@ export function RosterUploader() {
                   }
                 : { status: "server-error", error: result.error ?? "Failed" },
             );
+          }
+          for (const r of existingEntries) {
+            next.set(r.entry.id, { status: "attached", studentId: r.entry.existingStudentId! });
           }
           return next;
         });
@@ -232,7 +299,7 @@ export function RosterUploader() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-3 gap-5">
         <div className="rounded-lg border border-border bg-white p-5">
           <h2 className="text-sm font-semibold text-charcoal">Upload a CSV</h2>
           <p className="mt-1 text-sm text-slate">
@@ -291,6 +358,45 @@ export function RosterUploader() {
             </button>
           </div>
         </div>
+
+        <div className="rounded-lg border border-border bg-white p-5">
+          <h2 className="text-sm font-semibold text-charcoal">Or select existing students</h2>
+          <p className="mt-1 text-sm text-slate">Add someone already on file — no new account needed.</p>
+          <div className="mt-3 flex gap-2">
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              placeholder="Search by roll number or name"
+              className="flex-1 rounded-lg border border-border px-3 py-1.5 text-sm text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint"
+            />
+            <button
+              onClick={handleSearch}
+              disabled={searching}
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-charcoal hover:bg-surface disabled:opacity-60"
+            >
+              {searching ? "…" : "Search"}
+            </button>
+          </div>
+          {searchResults.length > 0 && (
+            <ul className="mt-3 flex max-h-40 flex-col gap-1 overflow-auto">
+              {searchResults.map((s) => (
+                <li key={s.id} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="truncate text-charcoal">
+                    <span className="font-mono">{s.rollNumber}</span> {s.fullName}
+                  </span>
+                  <button
+                    onClick={() => addExistingStudent(s)}
+                    disabled={alreadyInRoster.has(s.id)}
+                    className="shrink-0 text-xs font-semibold text-accent hover:text-accent-hover disabled:text-slate"
+                  >
+                    {alreadyInRoster.has(s.id) ? "Added" : "Add"}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
       {rows.length > 0 && (
@@ -298,7 +404,7 @@ export function RosterUploader() {
           <div className="flex items-center justify-between border-b border-border px-5 py-3">
             <p className="text-sm text-charcoal">
               {rows.length} student{rows.length === 1 ? "" : "s"} listed ·{" "}
-              {createdCount} created, {failedCount} need fixing, {uploadable.length} ready
+              {createdCount} added, {failedCount} need fixing, {uploadable.length} ready
             </p>
             <div className="flex gap-3">
               {failedCount > 0 && (
@@ -341,58 +447,75 @@ export function RosterUploader() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r, i) => (
-                  <tr
-                    key={r.entry.id}
-                    className={
-                      r.error || r.submission?.status === "server-error"
-                        ? "border-b border-border bg-alert-tint last:border-0"
-                        : r.submission?.status === "created"
-                          ? "border-b border-border bg-verified-tint last:border-0"
-                          : "border-b border-border last:border-0"
-                    }
-                  >
-                    <td className="px-4 py-2 text-charcoal">{i + 1}</td>
-                    <td className="px-4 py-2 font-mono text-charcoal">{r.entry.row.rollNumber}</td>
-                    <td className="px-4 py-2 text-charcoal">{r.entry.row.fullName}</td>
-                    <td className="px-4 py-2 text-charcoal">{r.entry.row.email}</td>
-                    <td className="px-4 py-2 text-charcoal">{r.entry.row.department}</td>
-                    <td className="px-4 py-2">
-                      {r.submission?.status === "created" ? (
-                        <PhotoCell
-                          entryId={r.entry.id}
-                          studentId={r.submission.studentId}
-                          photo={photos.get(r.entry.id) ?? null}
-                          onSelect={handlePhotoSelect}
-                        />
-                      ) : (
-                        <span className="text-slate">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2">
-                      {r.error && <span className="text-alert">{r.error}</span>}
-                      {!r.error && r.submission?.status === "server-error" && (
-                        <span className="text-alert">{r.submission.error}</span>
-                      )}
-                      {!r.error && r.submission?.status === "created" && (
-                        <span className="font-mono text-verified">
-                          Temp password: {r.submission.tempPassword}
-                        </span>
-                      )}
-                      {!r.error && !r.submission && <span className="text-slate">Ready</span>}
-                    </td>
-                    <td className="px-4 py-2">
-                      {r.submission?.status !== "created" && (
-                        <button
-                          onClick={() => removeEntry(r.entry.id)}
-                          className="text-sm font-semibold text-alert"
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((r, i) => {
+                  const photoStudentId =
+                    r.submission?.status === "created" || r.submission?.status === "attached"
+                      ? r.submission.studentId
+                      : null;
+
+                  return (
+                    <tr
+                      key={r.entry.id}
+                      className={
+                        r.error || r.submission?.status === "server-error"
+                          ? "border-b border-border bg-alert-tint last:border-0"
+                          : r.submission?.status === "created" || r.submission?.status === "attached"
+                            ? "border-b border-border bg-verified-tint last:border-0"
+                            : "border-b border-border last:border-0"
+                      }
+                    >
+                      <td className="px-4 py-2 text-charcoal">{i + 1}</td>
+                      <td className="px-4 py-2 font-mono text-charcoal">{r.entry.row.rollNumber}</td>
+                      <td className="px-4 py-2 text-charcoal">
+                        {r.entry.row.fullName}
+                        {r.entry.kind === "existing" && (
+                          <span className="ml-2 rounded bg-inactive-tint px-1.5 py-0.5 text-xs font-semibold text-inactive">
+                            EXISTING
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-charcoal">{r.entry.row.email}</td>
+                      <td className="px-4 py-2 text-charcoal">{r.entry.row.department}</td>
+                      <td className="px-4 py-2">
+                        {photoStudentId ? (
+                          <PhotoCell
+                            entryId={r.entry.id}
+                            studentId={photoStudentId}
+                            photo={photos.get(r.entry.id) ?? null}
+                            onSelect={handlePhotoSelect}
+                          />
+                        ) : (
+                          <span className="text-slate">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2">
+                        {r.error && <span className="text-alert">{r.error}</span>}
+                        {!r.error && r.submission?.status === "server-error" && (
+                          <span className="text-alert">{r.submission.error}</span>
+                        )}
+                        {!r.error && r.submission?.status === "created" && (
+                          <span className="font-mono text-verified">
+                            Temp password: {r.submission.tempPassword}
+                          </span>
+                        )}
+                        {!r.error && r.submission?.status === "attached" && (
+                          <span className="text-verified">Added to roster</span>
+                        )}
+                        {!r.error && !r.submission && <span className="text-slate">Ready</span>}
+                      </td>
+                      <td className="px-4 py-2">
+                        {!r.submission && (
+                          <button
+                            onClick={() => removeEntry(r.entry.id)}
+                            className="text-sm font-semibold text-alert"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

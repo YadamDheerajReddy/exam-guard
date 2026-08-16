@@ -21,6 +21,10 @@ export default async function OrgAdminLayout({
     redirect("/admin/organizations");
   }
 
+  if (admin.mustChangePassword) {
+    redirect("/admin/change-password");
+  }
+
   const supabase = await createClient();
   const { data: org } = await supabase
     .from("organizations")

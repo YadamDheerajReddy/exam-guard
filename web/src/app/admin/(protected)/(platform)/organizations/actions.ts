@@ -76,6 +76,7 @@ export async function createOrganizationWithAdmin(
     email: adminEmail,
     role: "EXAM_STAFF",
     organization_id: org.id,
+    must_change_password: true,
   });
 
   if (adminError) {

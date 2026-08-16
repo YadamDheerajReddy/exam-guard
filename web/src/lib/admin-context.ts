@@ -7,6 +7,7 @@ export type AdminContext = {
   email: string;
   role: "SUPER_ADMIN" | "EXAM_STAFF" | "AUDITOR";
   organizationId: string | null;
+  mustChangePassword: boolean;
 };
 
 // Resolves the signed-in user's admins row, if any. Null covers both "not
@@ -21,7 +22,7 @@ export async function getCurrentAdmin(): Promise<AdminContext | null> {
 
   const { data } = await supabase
     .from("admins")
-    .select("id, full_name, email, role, organization_id")
+    .select("id, full_name, email, role, organization_id, must_change_password")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -33,6 +34,7 @@ export async function getCurrentAdmin(): Promise<AdminContext | null> {
     email: data.email,
     role: data.role as AdminContext["role"],
     organizationId: data.organization_id,
+    mustChangePassword: data.must_change_password,
   };
 }
 

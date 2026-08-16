@@ -24,6 +24,11 @@ type ExistingMapping = {
   hallLabel: string;
   seatNumber: string;
 };
+type RosterBatch = {
+  id: string;
+  label: string;
+  studentIds: string[];
+};
 type Assignment = {
   studentId: string;
   rollNumber: string;
@@ -38,19 +43,62 @@ function hallLabel(hall: Hall) {
   return `${hall.buildingName} · ${hall.roomNumber} (${hall.usedSeats}/${hall.capacity})`;
 }
 
+// Seats get filled in the order this returns, so consecutive positions
+// become consecutive (physically adjacent) seat numbers within a hall.
+// Greedily picks from whichever department has the most students left
+// that isn't the department just picked — same approach as the classic
+// "reorganize string so no two adjacent characters match" problem. If one
+// department is more than half the group, some adjacency is unavoidable;
+// this still minimizes it as much as possible rather than giving up.
+function interleaveByDepartment(students: Student[]): Student[] {
+  const groups = new Map<string, Student[]>();
+  for (const s of students) {
+    const list = groups.get(s.department) ?? [];
+    list.push(s);
+    groups.set(s.department, list);
+  }
+
+  const queues = Array.from(groups.entries()).map(([department, list]) => ({
+    department,
+    list,
+    idx: 0,
+  }));
+
+  const result: Student[] = [];
+  let lastDepartment: string | null = null;
+
+  while (result.length < students.length) {
+    queues.sort((a, b) => (b.list.length - b.idx) - (a.list.length - a.idx));
+
+    const next =
+      queues.find((q) => q.idx < q.list.length && q.department !== lastDepartment) ??
+      queues.find((q) => q.idx < q.list.length);
+    if (!next) break;
+
+    result.push(next.list[next.idx]);
+    next.idx++;
+    lastDepartment = next.department;
+  }
+
+  return result;
+}
+
 export function MappingBuilder({
   examId,
   halls,
   students,
+  rosterBatches,
   existingMappings,
 }: {
   examId: string;
   halls: Hall[];
   students: Student[];
+  rosterBatches: RosterBatch[];
   existingMappings: ExistingMapping[];
 }) {
   const router = useRouter();
   const [department, setDepartment] = useState("all");
+  const [batchId, setBatchId] = useState("all");
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
   const [selectedHallIds, setSelectedHallIds] = useState<string[]>([]);
   const [mode, setMode] = useState<"select" | "review">("select");
@@ -63,10 +111,16 @@ export function MappingBuilder({
     [students],
   );
 
-  const filteredStudents = useMemo(
-    () => (department === "all" ? students : students.filter((s) => s.department === department)),
-    [students, department],
-  );
+  const filteredStudents = useMemo(() => {
+    let list = students;
+    if (department !== "all") list = list.filter((s) => s.department === department);
+    if (batchId !== "all") {
+      const batch = rosterBatches.find((b) => b.id === batchId);
+      const ids = new Set(batch?.studentIds ?? []);
+      list = list.filter((s) => ids.has(s.id));
+    }
+    return list;
+  }, [students, department, batchId, rosterBatches]);
 
   function toggleStudent(id: string) {
     setSelectedStudentIds((prev) => {
@@ -111,7 +165,7 @@ export function MappingBuilder({
     const result: Assignment[] = [];
     let hallIndex = 0;
 
-    for (const student of selectedStudentList()) {
+    for (const student of interleaveByDepartment(selectedStudentList())) {
       while (
         hallIndex < pickedHalls.length &&
         (remaining.get(pickedHalls[hallIndex].id) ?? 0) <= 0
@@ -232,18 +286,34 @@ export function MappingBuilder({
               <h2 className="text-sm font-semibold text-charcoal">
                 1. Select students ({selectedStudentIds.size} selected)
               </h2>
-              <select
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
-                className="rounded-lg border border-border px-3 py-1.5 text-sm text-ink"
-              >
-                <option value="all">All departments</option>
-                {departments.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
+              <div className="flex gap-2">
+                {rosterBatches.length > 0 && (
+                  <select
+                    value={batchId}
+                    onChange={(e) => setBatchId(e.target.value)}
+                    className="rounded-lg border border-border px-3 py-1.5 text-sm text-ink"
+                  >
+                    <option value="all">Any roster upload</option>
+                    {rosterBatches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.label} ({b.studentIds.length})
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <select
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
+                  className="rounded-lg border border-border px-3 py-1.5 text-sm text-ink"
+                >
+                  <option value="all">All departments</option>
+                  {departments.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="mt-3 flex gap-3 text-sm font-semibold text-accent">
@@ -312,6 +382,11 @@ export function MappingBuilder({
               ))}
             </div>
           </div>
+
+          <p className="text-xs text-slate">
+            Auto-allocate seats students from the same department apart where
+            possible, so classmates aren&rsquo;t seated next to each other.
+          </p>
 
           <div className="flex gap-3">
             <button

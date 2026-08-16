@@ -21,16 +21,19 @@ export default async function OrgAdminLayout({
     redirect("/admin/organizations");
   }
 
-  if (admin.mustChangePassword) {
-    redirect("/admin/change-password");
-  }
-
   const supabase = await createClient();
   const { data: org } = await supabase
     .from("organizations")
-    .select("name")
+    .select("name, slug")
     .eq("id", admin.organizationId!)
     .maybeSingle();
+
+  // mustChangePassword and a missing slug are set/cleared together in the
+  // normal flow, but check both — a missing Organization ID on its own is
+  // reason enough to block roster/mapping features either way.
+  if (admin.mustChangePassword || !org?.slug) {
+    redirect("/admin/change-password");
+  }
 
   return (
     <div className="flex min-h-screen flex-col">

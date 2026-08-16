@@ -11,6 +11,7 @@ export type RosterUploadResult = {
   ok: boolean;
   error?: string;
   tempPassword?: string;
+  studentId?: string;
 };
 
 type IncomingRow = RosterRow & { rowNumber: number };
@@ -47,7 +48,15 @@ export async function uploadRoster(
     .select("slug")
     .eq("id", admin.organizationId)
     .single();
-  const orgSlug = org!.slug;
+
+  if (!org?.slug) {
+    return clean.map((row) => ({
+      rowNumber: row.rowNumber,
+      ok: false,
+      error: "Set your organization's Organization ID (Change Password page) before uploading a roster.",
+    }));
+  }
+  const orgSlug = org.slug;
 
   // Two separate .in() lookups rather than one hand-built .or() filter
   // string — roll numbers/emails come straight from an uploaded CSV, and
@@ -86,7 +95,10 @@ export async function uploadRoster(
       continue;
     }
 
-    const created = await createAuthUser(rollNumberToAuthEmail(orgSlug, row.rollNumber));
+    const created = await createAuthUser(
+      rollNumberToAuthEmail(orgSlug, row.rollNumber),
+      `${row.rollNumber}@${orgSlug}`,
+    );
     if (!created.ok) {
       results.push({ rowNumber: row.rowNumber, ok: false, error: created.error });
       continue;
@@ -112,8 +124,81 @@ export async function uploadRoster(
       continue;
     }
 
-    results.push({ rowNumber: row.rowNumber, ok: true, tempPassword: created.tempPassword });
+    results.push({
+      rowNumber: row.rowNumber,
+      ok: true,
+      tempPassword: created.tempPassword,
+      studentId: created.userId,
+    });
   }
 
   return results;
+}
+
+const PHOTO_EXTENSIONS: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+
+export type UploadPhotoResult = { ok: true; signedUrl: string } | { ok: false; error: string };
+
+export async function uploadStudentPhoto(
+  studentId: string,
+  formData: FormData,
+): Promise<UploadPhotoResult> {
+  const admin = await requireOrgAdmin();
+
+  const file = formData.get("photo");
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "No file selected." };
+  }
+  const ext = PHOTO_EXTENSIONS[file.type];
+  if (!ext) {
+    return { ok: false, error: "Only JPEG, PNG, or WebP images are allowed." };
+  }
+  if (file.size > MAX_PHOTO_BYTES) {
+    return { ok: false, error: "Image must be under 5MB." };
+  }
+
+  const service = createAdminClient();
+
+  // Confirm the student actually belongs to this admin's org before
+  // touching storage or their row — studentId comes from the client, and
+  // server actions are untrusted entry points.
+  const { data: student } = await service
+    .from("students")
+    .select("id")
+    .eq("id", studentId)
+    .eq("organization_id", admin.organizationId)
+    .maybeSingle();
+  if (!student) {
+    return { ok: false, error: "Student not found." };
+  }
+
+  const path = `${admin.organizationId}/${studentId}.${ext}`;
+  const { error: uploadError } = await service.storage
+    .from("student-photos")
+    .upload(path, await file.arrayBuffer(), { contentType: file.type, upsert: true });
+  if (uploadError) {
+    return { ok: false, error: uploadError.message };
+  }
+
+  const { error: updateError } = await service
+    .from("students")
+    .update({ photo_url: path })
+    .eq("id", studentId);
+  if (updateError) {
+    return { ok: false, error: updateError.message };
+  }
+
+  const { data: signed, error: signError } = await service.storage
+    .from("student-photos")
+    .createSignedUrl(path, 300);
+  if (signError || !signed) {
+    return { ok: false, error: signError?.message ?? "Uploaded, but couldn't preview it." };
+  }
+
+  return { ok: true, signedUrl: signed.signedUrl };
 }

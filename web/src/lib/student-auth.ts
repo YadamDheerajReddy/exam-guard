@@ -21,3 +21,32 @@ export function slugify(name: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
+
+// A few reasonable candidates for an org admin picking their own
+// Organization ID on first login — full name, initials, first word, and a
+// short prefix. Caller filters out ones already taken.
+export function suggestOrganizationIds(name: string): string[] {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const candidates = new Set<string>();
+
+  const full = slugify(name);
+  if (full) candidates.add(full);
+
+  if (words.length > 1) {
+    const acronym = words
+      .map((w) => w[0])
+      .join("")
+      .toLowerCase();
+    if (acronym.length >= 2) candidates.add(acronym);
+  }
+
+  const firstWord = slugify(words[0] ?? "");
+  if (firstWord && firstWord !== full) candidates.add(firstWord);
+
+  if (full.length > 10) {
+    const short = full.slice(0, 10).replace(/-+$/, "");
+    if (short) candidates.add(short);
+  }
+
+  return Array.from(candidates).filter(Boolean);
+}

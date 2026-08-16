@@ -10,9 +10,13 @@ export function generateTempPassword() {
 // upload, org-admin creation, invigilator creation all need this). The
 // caller still has to insert the corresponding profile row themselves and
 // call deleteAuthUser() to roll back if that insert fails.
-export async function createAuthUser(email: string) {
+//
+// Pass an explicit password to use a caller-chosen value (students get a
+// deterministic rollNumber@organizationId temp password instead of a
+// random one) — omit it for the default random one (admins, invigilators).
+export async function createAuthUser(email: string, password?: string) {
   const admin = createAdminClient();
-  const tempPassword = generateTempPassword();
+  const tempPassword = password ?? generateTempPassword();
   const { data, error } = await admin.auth.admin.createUser({
     email,
     password: tempPassword,

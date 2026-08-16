@@ -3,11 +3,16 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import Papa from "papaparse";
 import { normalizeHeader, validateRosterRows, type RosterRow } from "@/lib/roster";
-import { uploadRoster } from "@/app/admin/(protected)/(org)/roster/actions";
+import { uploadRoster, uploadStudentPhoto } from "@/app/admin/(protected)/(org)/roster/actions";
 
 type Submission =
-  | { status: "created"; tempPassword: string }
+  | { status: "created"; tempPassword: string; studentId: string }
   | { status: "server-error"; error: string };
+
+type PhotoState =
+  | { status: "uploading" }
+  | { status: "uploaded"; signedUrl: string }
+  | { status: "error"; error: string };
 
 type Entry = { id: number; row: RosterRow };
 
@@ -24,6 +29,7 @@ const emptyRow = (): RosterRow => ({
 export function RosterUploader() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [submissions, setSubmissions] = useState<Map<number, Submission>>(new Map());
+  const [photos, setPhotos] = useState<Map<number, PhotoState>>(new Map());
   const [parseError, setParseError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [manualRow, setManualRow] = useState<RosterRow>(emptyRow());
@@ -130,7 +136,11 @@ export function RosterUploader() {
             next.set(
               result.rowNumber,
               result.ok
-                ? { status: "created", tempPassword: result.tempPassword ?? "" }
+                ? {
+                    status: "created",
+                    tempPassword: result.tempPassword ?? "",
+                    studentId: result.studentId ?? "",
+                  }
                 : { status: "server-error", error: result.error ?? "Failed" },
             );
           }
@@ -138,6 +148,34 @@ export function RosterUploader() {
         });
       } catch (err) {
         setUploadError(err instanceof Error ? err.message : "Upload failed unexpectedly.");
+      }
+    });
+  }
+
+  function handlePhotoSelect(entryId: number, studentId: string, file: File) {
+    setPhotos((prev) => new Map(prev).set(entryId, { status: "uploading" }));
+
+    const formData = new FormData();
+    formData.set("photo", file);
+
+    startTransition(async () => {
+      try {
+        const result = await uploadStudentPhoto(studentId, formData);
+        setPhotos((prev) =>
+          new Map(prev).set(
+            entryId,
+            result.ok
+              ? { status: "uploaded", signedUrl: result.signedUrl }
+              : { status: "error", error: result.error },
+          ),
+        );
+      } catch (err) {
+        setPhotos((prev) =>
+          new Map(prev).set(entryId, {
+            status: "error",
+            error: err instanceof Error ? err.message : "Upload failed unexpectedly.",
+          }),
+        );
       }
     });
   }
@@ -297,6 +335,7 @@ export function RosterUploader() {
                   <th className="px-4 py-2">Name</th>
                   <th className="px-4 py-2">Email</th>
                   <th className="px-4 py-2">Department</th>
+                  <th className="px-4 py-2">Photo</th>
                   <th className="px-4 py-2">Status</th>
                   <th className="px-4 py-2" />
                 </tr>
@@ -318,6 +357,18 @@ export function RosterUploader() {
                     <td className="px-4 py-2 text-charcoal">{r.entry.row.fullName}</td>
                     <td className="px-4 py-2 text-charcoal">{r.entry.row.email}</td>
                     <td className="px-4 py-2 text-charcoal">{r.entry.row.department}</td>
+                    <td className="px-4 py-2">
+                      {r.submission?.status === "created" ? (
+                        <PhotoCell
+                          entryId={r.entry.id}
+                          studentId={r.submission.studentId}
+                          photo={photos.get(r.entry.id) ?? null}
+                          onSelect={handlePhotoSelect}
+                        />
+                      ) : (
+                        <span className="text-slate">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-2">
                       {r.error && <span className="text-alert">{r.error}</span>}
                       {!r.error && r.submission?.status === "server-error" && (
@@ -363,6 +414,58 @@ export function RosterUploader() {
             </button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+function PhotoCell({
+  entryId,
+  studentId,
+  photo,
+  onSelect,
+}: {
+  entryId: number;
+  studentId: string;
+  photo: PhotoState | null;
+  onSelect: (entryId: number, studentId: string, file: File) => void;
+}) {
+  const inputId = `photo-${entryId}`;
+
+  return (
+    <div className="flex items-center gap-2">
+      {photo?.status === "uploaded" && (
+        // eslint-disable-next-line @next/next/no-img-element -- signed Supabase Storage URL, not worth next/image remotePatterns config for an admin thumbnail
+        <img
+          src={photo.signedUrl}
+          alt=""
+          className="h-8 w-8 rounded object-cover"
+        />
+      )}
+      <label
+        htmlFor={inputId}
+        className="cursor-pointer text-sm font-semibold text-accent hover:text-accent-hover"
+      >
+        {photo?.status === "uploading"
+          ? "Uploading…"
+          : photo?.status === "uploaded"
+            ? "Change"
+            : "Upload photo"}
+      </label>
+      <input
+        id={inputId}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        disabled={photo?.status === "uploading"}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onSelect(entryId, studentId, file);
+          e.target.value = "";
+        }}
+      />
+      {photo?.status === "error" && (
+        <span className="text-xs text-alert">{photo.error}</span>
       )}
     </div>
   );

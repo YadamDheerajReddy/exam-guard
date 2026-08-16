@@ -23,14 +23,19 @@ export async function uploadRoster(
   if (rows.length === 0) return [];
 
   // Re-validate server-side — never trust the client's pre-check alone.
+  // validateRosterRows works on plain rows and knows nothing about the
+  // caller's correlation ids, so zip rowNumber back on positionally
+  // (it doesn't reorder or drop rows) rather than trying to read it off
+  // its output.
   const revalidated = validateRosterRows(rows);
   const results: RosterUploadResult[] = [];
-  const clean = revalidated.filter((row, i) => {
+  const clean: (RosterRow & { rowNumber: number })[] = [];
+  revalidated.forEach((row, i) => {
     if (row.error) {
       results.push({ rowNumber: rows[i].rowNumber, ok: false, error: row.error });
-      return false;
+      return;
     }
-    return true;
+    clean.push({ ...row, rowNumber: rows[i].rowNumber });
   });
 
   if (clean.length === 0) return results;

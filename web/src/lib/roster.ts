@@ -9,7 +9,6 @@ export type RosterRow = {
 };
 
 export type ValidatedRosterRow = RosterRow & {
-  rowNumber: number;
   error: string | null;
 };
 
@@ -36,11 +35,10 @@ export function normalizeHeader(header: string): keyof RosterRow | null {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function validateRosterRows(rows: RosterRow[]): ValidatedRosterRow[] {
-  const rollSeen = new Map<string, number>();
-  const emailSeen = new Map<string, number>();
+  const rollSeen = new Set<string>();
+  const emailSeen = new Set<string>();
 
-  return rows.map((row, i) => {
-    const rowNumber = i + 2; // header is row 1
+  return rows.map((row) => {
     const rollNumber = row.rollNumber.trim();
     const fullName = row.fullName.trim();
     const email = row.email.trim().toLowerCase();
@@ -54,16 +52,16 @@ export function validateRosterRows(rows: RosterRow[]): ValidatedRosterRow[] {
     else if (!EMAIL_RE.test(email)) error = "Invalid email format.";
     else if (!department) error = "Missing department.";
     else if (rollSeen.has(rollNumber)) {
-      error = `Duplicate roll number (also row ${rollSeen.get(rollNumber)}).`;
+      error = "Duplicate roll number in this list.";
     } else if (emailSeen.has(email)) {
-      error = `Duplicate email (also row ${emailSeen.get(email)}).`;
+      error = "Duplicate email in this list.";
     }
 
     if (!error) {
-      rollSeen.set(rollNumber, rowNumber);
-      emailSeen.set(email, rowNumber);
+      rollSeen.add(rollNumber);
+      emailSeen.add(email);
     }
 
-    return { rollNumber, fullName, email, department, photoUrl, rowNumber, error };
+    return { rollNumber, fullName, email, department, photoUrl, error };
   });
 }

@@ -1,8 +1,16 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { requireOrgAdmin } from "@/lib/admin-context";
 
 export default async function AdminDashboardPage() {
+  const admin = await requireOrgAdmin();
   const supabase = await createClient();
+
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("slug")
+    .eq("id", admin.organizationId)
+    .maybeSingle();
 
   const [hallsCount, examsCount, mappingsCount, upcomingExams] =
     await Promise.all([
@@ -41,6 +49,13 @@ export default async function AdminDashboardPage() {
     <div className="mx-auto max-w-4xl">
       <h1 className="text-xl font-bold text-ink">Dashboard</h1>
       <p className="mt-1 text-sm text-slate">Exam-cycle overview.</p>
+
+      {org?.slug && (
+        <div className="mt-4 rounded-lg bg-accent-tint px-4 py-3 text-sm text-accent">
+          Your Organization ID is <span className="font-mono font-semibold">{org.slug}</span> —
+          students need this, their roll number, and their password to log in.
+        </div>
+      )}
 
       <div className="mt-6 grid grid-cols-3 gap-4">
         {stats.map((stat) => (

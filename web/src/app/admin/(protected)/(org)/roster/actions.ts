@@ -123,6 +123,7 @@ export async function uploadRoster(
         department: row.department,
         photo_url: row.photoUrl || "",
         organization_id: admin.organizationId,
+        must_change_password: true,
       });
 
       if (insertError) {

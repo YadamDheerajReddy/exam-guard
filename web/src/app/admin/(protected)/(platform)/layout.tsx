@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentAdmin } from "@/lib/admin-context";
 import { adminLogout } from "../../actions";
 import { PlatformNav } from "@/components/admin/platform-nav";
+import { Logo } from "@/components/logo";
 
 export default async function PlatformAdminLayout({
   children,
@@ -24,9 +25,12 @@ export default async function PlatformAdminLayout({
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center justify-between border-b border-border bg-white px-6 py-4">
-        <div>
-          <p className="text-sm font-bold text-ink">ExamGuard Platform</p>
-          <p className="text-xs text-slate">{admin.fullName} · Super Admin</p>
+        <div className="flex items-center gap-3">
+          <Logo size={22} withWordmark={false} />
+          <div>
+            <p className="text-sm font-bold text-ink">ExamGuard Platform</p>
+            <p className="text-xs text-slate">{admin.fullName} · Super Admin</p>
+          </div>
         </div>
         <form action={adminLogout}>
           <button className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-charcoal transition-colors hover:bg-surface">

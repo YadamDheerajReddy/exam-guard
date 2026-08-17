@@ -1,11 +1,14 @@
 import Link from "next/link";
+import { Logo } from "@/components/logo";
 
 export default function HomePage() {
   return (
     <main className="flex flex-1 flex-col items-center justify-center px-6 py-16">
       <div className="w-full max-w-md text-center">
-        <h1 className="text-2xl font-bold text-ink">ExamGuard</h1>
-        <p className="mt-2 text-sm text-slate">
+        <div className="flex justify-center">
+          <Logo size={44} />
+        </div>
+        <p className="mt-3 text-sm text-slate">
           Smart exam allocation &amp; identity verification
         </p>
 

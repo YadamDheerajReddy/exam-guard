@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
+import { Logo } from "@/components/logo";
 import { Colors, Radius } from "@/constants/theme";
 
 export default function LoginScreen() {
@@ -46,6 +47,7 @@ export default function LoginScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <View style={styles.card}>
+          <Logo size={26} />
           <Text style={styles.title}>Invigilator Scanner</Text>
           <Text style={styles.subtitle}>Sign in with your institutional email.</Text>
 
@@ -113,6 +115,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   title: {
+    marginTop: 16,
     fontSize: 20,
     fontWeight: "700",
     color: Colors.ink,

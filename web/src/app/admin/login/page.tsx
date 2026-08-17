@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { adminLogin } from "../actions";
+import { Logo } from "@/components/logo";
 
 export default function AdminLoginPage() {
   const [state, formAction, pending] = useActionState(adminLogin, undefined);
@@ -9,7 +10,8 @@ export default function AdminLoginPage() {
   return (
     <main className="flex flex-1 flex-col items-center justify-center px-6 py-16">
       <div className="w-full max-w-sm rounded-lg border border-border bg-white p-8 shadow-sm">
-        <h1 className="text-xl font-bold text-ink">Admin Console</h1>
+        <Logo size={28} />
+        <h1 className="mt-4 text-xl font-bold text-ink">Admin Console</h1>
         <p className="mt-1 text-sm text-slate">
           Sign in with your institutional email.
         </p>

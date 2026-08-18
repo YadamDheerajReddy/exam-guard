@@ -46,9 +46,17 @@ export async function studentLogin(
   if (student) {
     const { data: org } = await service
       .from("organizations")
-      .select("slug")
+      .select("slug, is_suspended")
       .eq("id", student.organization_id)
       .maybeSingle();
+
+    // Super Admins can hold an org out of service entirely (organizations
+    // page) — block here with a clear reason rather than letting them in
+    // and bouncing them from the next page with no explanation.
+    if (org?.is_suspended) {
+      await supabase.auth.signOut();
+      return { error: "This organization has been suspended. Contact your platform administrator." };
+    }
 
     const tempPassword = org?.slug ? `${student.roll_number}@${org.slug}` : null;
     if (tempPassword && password === tempPassword) {
@@ -63,4 +71,21 @@ export async function studentLogout() {
   const supabase = await createClient();
   await supabase.auth.signOut();
   redirect("/student/login");
+}
+
+// Institution codes are the same human-facing "Organization ID" already
+// shown to admins and handed out to students for login — not a secret —
+// so looking up the owning org's admin contact emails from it for the
+// "Forgot password?" panel doesn't expose anything the student couldn't
+// already infer from being told to use that code.
+export async function getOrgAdminEmails(institutionCode: string): Promise<string[]> {
+  const trimmed = institutionCode.trim().toLowerCase();
+  if (!trimmed) return [];
+
+  const service = createAdminClient();
+  const { data: org } = await service.from("organizations").select("id").eq("slug", trimmed).maybeSingle();
+  if (!org) return [];
+
+  const { data: admins } = await service.from("admins").select("email").eq("organization_id", org.id);
+  return (admins ?? []).map((a) => a.email);
 }

@@ -264,29 +264,31 @@ export function MappingBuilder({
           <summary className="cursor-pointer text-sm font-semibold text-charcoal">
             Already mapped ({existingMappings.length})
           </summary>
-          <table className="mt-3 w-full text-sm">
-            <tbody>
-              {existingMappings.map((m) => (
-                <tr key={m.id} className="border-b border-border last:border-0">
-                  <td className="py-1.5 font-mono text-charcoal">{m.rollNumber}</td>
-                  <td className="py-1.5 text-charcoal">{m.fullName}</td>
-                  <td className="py-1.5 text-slate">{m.hallLabel}</td>
-                  <td className="py-1.5 font-mono text-slate">Seat {m.seatNumber}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[28rem] text-sm">
+              <tbody>
+                {existingMappings.map((m) => (
+                  <tr key={m.id} className="border-b border-border last:border-0">
+                    <td className="py-1.5 font-mono text-charcoal">{m.rollNumber}</td>
+                    <td className="py-1.5 text-charcoal">{m.fullName}</td>
+                    <td className="py-1.5 text-slate">{m.hallLabel}</td>
+                    <td className="py-1.5 font-mono text-slate">Seat {m.seatNumber}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </details>
       )}
 
       {mode === "select" && (
         <>
           <div className="rounded-lg border border-border bg-white p-5">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-sm font-semibold text-charcoal">
                 1. Select students ({selectedStudentIds.size} selected)
               </h2>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {rosterBatches.length > 0 && (
                   <select
                     value={batchId}
@@ -366,7 +368,7 @@ export function MappingBuilder({
             <h2 className="text-sm font-semibold text-charcoal">
               2. Select halls ({selectedHallIds.length} selected, filled in this order)
             </h2>
-            <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
               {halls.map((h) => (
                 <label
                   key={h.id}

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireStudent } from "@/lib/student-context";
 import { examStatus, type ExamStatus } from "@/lib/reveal";
+import { CalendarClock, ChevronRight, ClipboardList } from "lucide-react";
 
 const STATUS_LABEL: Record<ExamStatus, string> = {
   upcoming: "Upcoming",
@@ -67,7 +68,8 @@ export default async function StudentTimetablePage() {
       <div className="mt-6 flex flex-col gap-3">
         {exams.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border bg-white p-10 text-center">
-            <p className="text-sm text-slate">
+            <ClipboardList className="mx-auto size-8 text-slate" strokeWidth={1.5} />
+            <p className="mt-3 text-sm text-slate">
               No exams mapped to you yet. Check back once your institution
               publishes the schedule.
             </p>
@@ -77,20 +79,24 @@ export default async function StudentTimetablePage() {
             <Link
               key={exam.examId}
               href={`/student/exams/${exam.examId}`}
-              className="flex items-center justify-between rounded-lg border border-border bg-white p-5 transition-colors hover:border-accent"
+              className="flex items-center justify-between gap-3 rounded-lg border border-border bg-white p-5 transition-all hover:-translate-y-0.5 hover:border-accent hover:shadow-sm"
             >
-              <div>
-                <p className="text-sm font-bold text-ink">{exam.courseCode}</p>
-                <p className="text-sm text-slate">{exam.courseTitle}</p>
-                <p className="mt-1 text-xs text-slate">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold text-ink">{exam.courseCode}</p>
+                <p className="truncate text-sm text-slate">{exam.courseTitle}</p>
+                <p className="mt-1 flex items-center gap-1.5 text-xs text-slate">
+                  <CalendarClock className="size-3.5 shrink-0" strokeWidth={2} />
                   {exam.examDate} · {exam.startTime}
                 </p>
               </div>
-              <span
-                className={`rounded px-2 py-1 text-xs font-semibold uppercase tracking-wide ${STATUS_CLASS[exam.status]}`}
-              >
-                {STATUS_LABEL[exam.status]}
-              </span>
+              <div className="flex shrink-0 items-center gap-2">
+                <span
+                  className={`rounded px-2 py-1 text-xs font-semibold uppercase tracking-wide ${STATUS_CLASS[exam.status]}`}
+                >
+                  {STATUS_LABEL[exam.status]}
+                </span>
+                <ChevronRight className="size-4 text-slate" strokeWidth={2} />
+              </div>
             </Link>
           ))
         )}

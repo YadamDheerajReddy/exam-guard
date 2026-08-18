@@ -21,11 +21,18 @@ export async function getCurrentStudent(): Promise<StudentContext | null> {
 
   const { data } = await supabase
     .from("students")
-    .select("id, roll_number, full_name, organization_id, must_change_password")
+    .select("id, roll_number, full_name, organization_id, must_change_password, organizations(is_suspended)")
     .eq("id", user.id)
     .maybeSingle();
 
   if (!data) return null;
+
+  // A Super Admin can hold an org out of service (organizations page) —
+  // treat its students as unauthenticated everywhere, same as "not a
+  // student at all", so an already-open session gets cut off on its next
+  // request too, not just at the next login attempt.
+  const org = Array.isArray(data.organizations) ? data.organizations[0] : data.organizations;
+  if (org?.is_suspended) return null;
 
   return {
     id: data.id,

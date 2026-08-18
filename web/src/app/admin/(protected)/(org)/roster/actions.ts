@@ -7,6 +7,9 @@ import { createAuthUser, deleteAuthUser } from "@/lib/create-auth-account";
 import { rollNumberToAuthEmail } from "@/lib/student-auth";
 import { requireOrgAdmin } from "@/lib/admin-context";
 import { validateRosterRows, type RosterRow } from "@/lib/roster";
+import { sendMail } from "@/lib/mailer";
+import { studentCreatedEmail } from "@/lib/email-templates";
+import { absoluteUrl } from "@/lib/site-url";
 
 export type RosterUploadResult = {
   rowNumber: number;
@@ -57,7 +60,7 @@ export async function uploadRoster(
 
   const { data: org } = await service
     .from("organizations")
-    .select("slug")
+    .select("name, slug")
     .eq("id", admin.organizationId)
     .single();
 
@@ -73,6 +76,7 @@ export async function uploadRoster(
     };
   }
   const orgSlug = org.slug;
+  const studentLoginUrl = await absoluteUrl("/student/login");
 
   const createdStudentIds: string[] = [];
 
@@ -131,6 +135,16 @@ export async function uploadRoster(
         rowResults.push({ rowNumber: row.rowNumber, ok: false, error: insertError.message });
         continue;
       }
+
+      const { subject, html } = studentCreatedEmail({
+        orgName: org.name,
+        fullName: row.fullName,
+        rollNumber: row.rollNumber,
+        organizationId: orgSlug,
+        tempPassword: created.tempPassword,
+        loginUrl: studentLoginUrl,
+      });
+      await sendMail({ to: row.email, subject, html });
 
       rowResults.push({
         rowNumber: row.rowNumber,

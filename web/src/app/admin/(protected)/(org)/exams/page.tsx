@@ -19,7 +19,7 @@ export default async function ExamsPage() {
         <ExamForm />
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-border bg-white">
+      <div className="mt-6 overflow-x-auto overflow-hidden rounded-lg border border-border bg-white">
         {!exams || exams.length === 0 ? (
           <p className="p-6 text-center text-sm text-slate">No exams yet.</p>
         ) : (

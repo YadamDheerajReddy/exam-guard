@@ -22,11 +22,18 @@ export async function getCurrentAdmin(): Promise<AdminContext | null> {
 
   const { data } = await supabase
     .from("admins")
-    .select("id, full_name, email, role, organization_id, must_change_password")
+    .select("id, full_name, email, role, organization_id, must_change_password, organizations(is_suspended)")
     .eq("id", user.id)
     .maybeSingle();
 
   if (!data) return null;
+
+  // A Super Admin can hold an org out of service (organizations page) —
+  // treat its admins as unauthenticated everywhere, same as "not an admin
+  // at all", so an already-open session gets cut off on its next request
+  // too, not just at the next login attempt.
+  const org = Array.isArray(data.organizations) ? data.organizations[0] : data.organizations;
+  if (data.organization_id && org?.is_suspended) return null;
 
   return {
     id: data.id,

@@ -30,7 +30,7 @@ export function ExamForm() {
   );
 
   return (
-    <form action={formAction} className="mt-3 grid grid-cols-2 gap-4">
+    <form action={formAction} className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
       <input
         name="courseCode"
         placeholder="Course code (e.g. CS301)"
@@ -68,7 +68,7 @@ export function ExamForm() {
         />
       </div>
 
-      <div className="col-span-2 flex flex-col gap-1.5">
+      <div className="sm:col-span-2 flex flex-col gap-1.5">
         <label htmlFor="revealThresholdMinutes" className="text-sm font-semibold text-charcoal">
           Reveal hall/seat this many minutes before start
         </label>
@@ -84,18 +84,18 @@ export function ExamForm() {
       </div>
 
       {preview && (
-        <p className="col-span-2 rounded-lg bg-accent-tint px-3 py-2 text-sm text-accent">
+        <p className="sm:col-span-2 rounded-lg bg-accent-tint px-3 py-2 text-sm text-accent">
           {preview}
         </p>
       )}
 
       {state?.error && (
-        <p className="col-span-2 rounded-lg bg-alert-tint px-3 py-2 text-sm text-alert">
+        <p className="sm:col-span-2 rounded-lg bg-alert-tint px-3 py-2 text-sm text-alert">
           {state.error}
         </p>
       )}
 
-      <div className="col-span-2">
+      <div className="sm:col-span-2">
         <button
           type="submit"
           disabled={pending}

@@ -101,6 +101,7 @@ export default function ManualSearchScreen() {
       {pending && (
         <VerificationResultCard
           outcome={pending.outcome}
+          exam={session.exam}
           onConfirm={pending.outcome.kind === "VERIFIED" ? confirmVerified : undefined}
           onDismiss={dismiss}
         />

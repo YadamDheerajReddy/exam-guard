@@ -10,6 +10,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
+import { checkLoginPassword } from "@/lib/api";
+import { setPendingLoginCheck } from "@/lib/pending-login-check";
 import { Logo } from "@/components/logo";
 import { Colors, Radius } from "@/constants/theme";
 
@@ -35,7 +37,15 @@ export default function LoginScreen() {
     setSubmitting(false);
     if (signInError) {
       setError("Incorrect email or password.");
+      return;
     }
+
+    // Registered before Stack.Protected has a chance to mount (app)/_layout
+    // and read must_change_password itself — see pending-login-check.ts for
+    // why that ordering matters. Errors here (e.g. not actually an
+    // invigilator account) are swallowed; the layout's own lookup surfaces
+    // that case with a proper message.
+    setPendingLoginCheck(checkLoginPassword(password).catch(() => ({ mustChangePassword: false })));
     // On success, onAuthStateChange updates the session and Stack.Protected
     // switches to the (app) group automatically.
   }

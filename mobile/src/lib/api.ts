@@ -75,3 +75,31 @@ export async function syncEvents(events: SyncEvent[]): Promise<SyncAck[]> {
   const data = await res.json();
   return data.acks;
 }
+
+// Called once right after supabase.auth.signInWithPassword() succeeds —
+// flags the account for a forced password change if the password just
+// typed still matches the org's deterministic temp pattern, regardless of
+// whether this is the first login (see the route's own comment for why).
+export async function checkLoginPassword(password: string): Promise<{ mustChangePassword: boolean }> {
+  const headers = await authHeader();
+  const res = await fetch(`${API_BASE_URL}/api/invigilator/login-check`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) throw new Error("Couldn't verify login.");
+  return res.json();
+}
+
+export async function changeInvigilatorPassword(newPassword: string): Promise<void> {
+  const headers = await authHeader();
+  const res = await fetch(`${API_BASE_URL}/api/invigilator/change-password`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ newPassword }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error ?? "Couldn't change password.");
+  }
+}

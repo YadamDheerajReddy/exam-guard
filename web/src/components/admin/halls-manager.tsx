@@ -2,6 +2,7 @@
 
 import { useActionState, useState, useTransition } from "react";
 import { createHall, deleteHall, updateHall, type HallFormState } from "@/app/admin/(protected)/(org)/halls/actions";
+import { AlertCircle, Building2, Pencil, Trash2 } from "lucide-react";
 
 type Hall = {
   id: string;
@@ -21,9 +22,12 @@ export function HallsManager({ initialHalls }: { initialHalls: Hall[] }) {
         <HallForm action={createHall} submitLabel="Add hall" />
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-border bg-white">
+      <div className="overflow-x-auto overflow-hidden rounded-lg border border-border bg-white">
         {initialHalls.length === 0 ? (
-          <p className="p-6 text-center text-sm text-slate">No halls yet.</p>
+          <div className="p-10 text-center">
+            <Building2 className="mx-auto size-8 text-slate" strokeWidth={1.5} />
+            <p className="mt-3 text-sm text-slate">No halls yet.</p>
+          </div>
         ) : (
           <table className="w-full text-sm">
             <thead>
@@ -77,25 +81,32 @@ function HallRow({ hall, onEdit }: { hall: Hall; onEdit: () => void }) {
   }
 
   return (
-    <tr className="border-b border-border last:border-0">
+    <tr className="border-b border-border transition-colors last:border-0 hover:bg-surface">
       <td className="px-4 py-3 text-ink">{hall.building_name}</td>
       <td className="px-4 py-3 font-mono text-charcoal">{hall.room_number}</td>
       <td className="px-4 py-3 text-charcoal">{hall.floor_level}</td>
       <td className="px-4 py-3 text-charcoal">{hall.capacity}</td>
       <td className="px-4 py-3">
         <div className="flex items-center justify-end gap-3">
-          {error && <span className="text-xs text-alert">{error}</span>}
+          {error && (
+            <span className="inline-flex items-center gap-1 text-xs text-alert">
+              <AlertCircle className="size-3.5" strokeWidth={2} />
+              {error}
+            </span>
+          )}
           <button
             onClick={onEdit}
-            className="text-sm font-semibold text-accent hover:text-accent-hover"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-accent transition-colors hover:text-accent-hover"
           >
+            <Pencil className="size-3.5" strokeWidth={2} />
             Edit
           </button>
           <button
             onClick={handleDelete}
             disabled={pending}
-            className="text-sm font-semibold text-alert disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-alert transition-colors disabled:opacity-50"
           >
+            <Trash2 className="size-3.5" strokeWidth={2} />
             Delete
           </button>
         </div>
@@ -125,7 +136,7 @@ function HallForm({
   );
 
   return (
-    <form action={formAction} className="mt-3 grid grid-cols-4 gap-3">
+    <form action={formAction} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <input
         name="buildingName"
         placeholder="Building name"
@@ -159,12 +170,13 @@ function HallForm({
       />
 
       {state?.error && (
-        <p className="col-span-4 rounded-lg bg-alert-tint px-3 py-2 text-sm text-alert">
+        <p className="sm:col-span-2 lg:col-span-4 animate-in fade-in flex items-center gap-2 rounded-lg bg-alert-tint px-3 py-2 text-sm text-alert">
+          <AlertCircle className="size-4 shrink-0" strokeWidth={2} />
           {state.error}
         </p>
       )}
 
-      <div className="col-span-4 flex gap-2">
+      <div className="sm:col-span-2 lg:col-span-4 flex gap-2">
         <button
           type="submit"
           disabled={pending}

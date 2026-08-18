@@ -5,6 +5,8 @@ export type InvigilatorContext = {
   id: string;
   fullName: string;
   assignedHallId: string | null;
+  organizationId: string;
+  mustChangePassword: boolean;
 };
 
 export class UnauthorizedError extends Error {}
@@ -33,7 +35,7 @@ export async function requireInvigilator(request: Request): Promise<InvigilatorC
 
   const { data } = await service
     .from("invigilators")
-    .select("id, full_name, assigned_hall_id, is_active")
+    .select("id, full_name, assigned_hall_id, is_active, organization_id, must_change_password, organizations(is_suspended)")
     .eq("id", userData.user.id)
     .maybeSingle();
 
@@ -41,5 +43,20 @@ export async function requireInvigilator(request: Request): Promise<InvigilatorC
     throw new UnauthorizedError("Not an active invigilator account.");
   }
 
-  return { id: data.id, fullName: data.full_name, assignedHallId: data.assigned_hall_id };
+  // A Super Admin can hold an org out of service entirely (organizations
+  // page) — block every scanner-app API call for its invigilators, not
+  // just fresh logins, since this uses a bearer token that otherwise stays
+  // valid until it expires on its own.
+  const org = Array.isArray(data.organizations) ? data.organizations[0] : data.organizations;
+  if (org?.is_suspended) {
+    throw new UnauthorizedError("This organization has been suspended.");
+  }
+
+  return {
+    id: data.id,
+    fullName: data.full_name,
+    assignedHallId: data.assigned_hall_id,
+    organizationId: data.organization_id,
+    mustChangePassword: data.must_change_password,
+  };
 }

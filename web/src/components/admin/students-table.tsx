@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { resetStudentPassword } from "@/app/admin/(protected)/(org)/students/actions";
 import { uploadStudentPhoto } from "@/app/admin/(protected)/(org)/roster/actions";
+import { CheckCircle2, KeyRound, Search, XCircle } from "lucide-react";
 
 type Student = {
   id: string;
@@ -84,13 +85,16 @@ export function StudentsTable({ students }: { students: Student[] }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex gap-3">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by roll number or name"
-          className="flex-1 rounded-lg border border-border px-3 py-2 text-sm text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint"
-        />
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="relative min-w-0 flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate" strokeWidth={2} />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by roll number or name"
+            className="w-full rounded-lg border border-border py-2 pl-9 pr-3 text-sm text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint"
+          />
+        </div>
         <select
           value={department}
           onChange={(e) => setDepartment(e.target.value)}
@@ -105,7 +109,7 @@ export function StudentsTable({ students }: { students: Student[] }) {
         </select>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-border bg-white">
+      <div className="overflow-x-auto overflow-hidden rounded-lg border border-border bg-white">
         {filtered.length === 0 ? (
           <p className="p-6 text-center text-sm text-slate">
             {students.length === 0 ? "No students yet." : "No students match."}
@@ -131,7 +135,7 @@ export function StudentsTable({ students }: { students: Student[] }) {
                 const inputId = `student-photo-${s.id}`;
 
                 return (
-                  <tr key={s.id} className="border-b border-border last:border-0">
+                  <tr key={s.id} className="border-b border-border transition-colors last:border-0 hover:bg-surface">
                     <td className="px-4 py-2">
                       <div className="flex flex-col items-center gap-1">
                         {photoUrl ? (
@@ -164,11 +168,18 @@ export function StudentsTable({ students }: { students: Student[] }) {
                       </div>
                     </td>
                     <td className="px-4 py-2 font-mono text-charcoal">{s.rollNumber}</td>
-                    <td className="px-4 py-2 text-charcoal">{s.fullName}</td>
-                    <td className="px-4 py-2 text-charcoal">{s.email}</td>
+                    <td className="max-w-[16rem] truncate px-4 py-2 text-charcoal">{s.fullName}</td>
+                    <td className="max-w-[16rem] truncate px-4 py-2 text-charcoal">{s.email}</td>
                     <td className="px-4 py-2 text-charcoal">{s.department}</td>
                     <td className="px-4 py-2">
-                      <span className={s.isActive ? "text-verified" : "text-inactive"}>
+                      <span
+                        className={`flex items-center gap-1.5 ${s.isActive ? "text-verified" : "text-inactive"}`}
+                      >
+                        {s.isActive ? (
+                          <CheckCircle2 className="size-4" strokeWidth={2} />
+                        ) : (
+                          <XCircle className="size-4" strokeWidth={2} />
+                        )}
                         {s.isActive ? "Active" : "Inactive"}
                       </span>
                     </td>
@@ -183,8 +194,9 @@ export function StudentsTable({ students }: { students: Student[] }) {
                         <button
                           onClick={() => handleResetPassword(s.id)}
                           disabled={resetState?.status === "pending"}
-                          className="text-sm font-semibold text-accent hover:text-accent-hover disabled:opacity-60"
+                          className="flex items-center gap-1.5 text-sm font-semibold text-accent transition-colors hover:text-accent-hover disabled:opacity-60"
                         >
+                          <KeyRound className="size-3.5" strokeWidth={2} />
                           {resetState?.status === "pending" ? "Resetting…" : "Reset password"}
                         </button>
                       )}

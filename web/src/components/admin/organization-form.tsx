@@ -15,7 +15,7 @@ export function OrganizationForm() {
 
   return (
     <div className="mt-3">
-      <form ref={formRef} action={formAction} className="grid grid-cols-2 gap-3">
+      <form ref={formRef} action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <input
           name="orgName"
           placeholder="Organization name"
@@ -47,13 +47,13 @@ export function OrganizationForm() {
         />
 
         {state && "error" in state && (
-          <p className="col-span-2 rounded-lg bg-alert-tint px-3 py-2 text-sm text-alert">
+          <p className="sm:col-span-2 rounded-lg bg-alert-tint px-3 py-2 text-sm text-alert">
             {state.error}
           </p>
         )}
 
         {state && "success" in state && (
-          <div className="col-span-2 rounded-lg bg-verified-tint px-3 py-3 text-sm text-verified">
+          <div className="sm:col-span-2 rounded-lg bg-verified-tint px-3 py-3 text-sm text-verified">
             <p className="font-semibold">{state.orgName} created.</p>
             <p className="mt-1">
               Admin login: <span className="font-mono">{state.adminEmail}</span>
@@ -67,7 +67,7 @@ export function OrganizationForm() {
           </div>
         )}
 
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <button
             type="submit"
             disabled={pending}

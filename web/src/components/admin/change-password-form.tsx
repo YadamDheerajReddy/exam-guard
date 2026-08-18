@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { changePassword } from "@/app/admin/(protected)/change-password/actions";
+import { AlertCircle, KeyRound } from "lucide-react";
 
 export function ChangePasswordForm({
   needsOrganizationId,
@@ -15,8 +16,9 @@ export function ChangePasswordForm({
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center px-6 py-16">
-      <div className="w-full max-w-sm rounded-lg border border-border bg-white p-8 shadow-sm">
-        <h1 className="text-xl font-bold text-ink">
+      <div className="w-full max-w-sm animate-in fade-in slide-in-from-bottom-2 rounded-lg border border-border bg-white p-8 shadow-sm duration-300">
+        <KeyRound className="size-7 text-accent" strokeWidth={2} />
+        <h1 className="mt-3 text-xl font-bold text-ink">
           {needsOrganizationId ? "Set up your account" : "Set a new password"}
         </h1>
         <p className="mt-1 text-sm text-slate">
@@ -94,7 +96,8 @@ export function ChangePasswordForm({
           )}
 
           {state?.error && (
-            <p className="rounded-lg bg-alert-tint px-3 py-2 text-sm text-alert">
+            <p className="animate-in fade-in flex items-center gap-2 rounded-lg bg-alert-tint px-3 py-2 text-sm text-alert">
+              <AlertCircle className="size-4 shrink-0" strokeWidth={2} />
               {state.error}
             </p>
           )}

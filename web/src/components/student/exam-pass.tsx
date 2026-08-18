@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { getExamPass, type ExamPassResult } from "@/app/student/(protected)/exams/[examId]/actions";
+import { CheckCircle2, Lock, MapPin } from "lucide-react";
 
 const POLL_INTERVAL_MS = 60_000;
 // Once reveal is due within this window, schedule a precise one-off check
@@ -106,25 +107,38 @@ export function ExamPass({ examId, initial }: { examId: string; initial: ExamPas
       </div>
 
       {pass.checkedIn ? (
-        <div className="rounded-lg bg-verified-tint p-6 text-center">
-          <p className="text-sm font-bold text-verified">Checked in</p>
+        <div className="animate-in fade-in zoom-in-95 rounded-lg bg-verified-tint p-6 text-center transition-all duration-300">
+          <CheckCircle2 className="mx-auto size-8 text-verified" strokeWidth={2} />
+          <p className="mt-2 text-sm font-bold text-verified">Checked in</p>
           <p className="mt-1 text-xs text-verified">
             {pass.checkedInAt && new Date(pass.checkedInAt).toLocaleString()}
           </p>
         </div>
       ) : pass.revealed && pass.hall ? (
-        <div className="rounded-lg bg-verified-tint p-6 text-center transition-all duration-300">
-          <p className="text-xs font-semibold uppercase tracking-wide text-verified">
+        <div className="animate-in fade-in zoom-in-95 rounded-lg bg-verified-tint p-6 text-center transition-all duration-300">
+          <p className="flex items-center justify-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-verified">
+            <MapPin className="size-3.5" strokeWidth={2} />
             Hall &amp; seat
           </p>
-          <p className="mt-1 text-[28px] font-extrabold leading-tight text-ink">
-            {pass.hall.buildingName} · {pass.hall.roomNumber}
-          </p>
-          <p className="mt-1 font-mono text-lg text-charcoal">Seat {pass.hall.seatNumber}</p>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-verified">Building</p>
+              <p className="mt-1 truncate text-xl font-extrabold leading-tight text-ink">{pass.hall.buildingName}</p>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-verified">Room No.</p>
+              <p className="mt-1 truncate text-xl font-extrabold leading-tight text-ink">{pass.hall.roomNumber}</p>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-verified">Seat No.</p>
+              <p className="mt-1 truncate font-mono text-xl font-extrabold leading-tight text-ink">{pass.hall.seatNumber}</p>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="rounded-lg bg-pending-tint p-6 text-center transition-all duration-300">
-          <p className="text-xs font-semibold uppercase tracking-wide text-pending">Locked</p>
+          <Lock className="mx-auto size-6 text-pending" strokeWidth={2} />
+          <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-pending">Locked</p>
           <p className="mt-1 text-2xl font-bold text-ink">
             Unlocks in {formatCountdown(msUntilReveal)}
           </p>

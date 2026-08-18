@@ -14,6 +14,16 @@ export function rollNumberToAuthEmail(orgSlug: string, rollNumber: string) {
   return `${rollNumber.trim().toLowerCase()}.${orgSlug.trim().toLowerCase()}@${STUDENT_AUTH_DOMAIN}`;
 }
 
+// Invigilators get a deterministic temp password too ({organizationName
+// with spaces stripped}@#{organizationSlug}), mirroring the student temp
+// password below — spaces are stripped so the password is a single
+// copy-pasteable token instead of something that silently fails if a
+// student/invigilator (or an admin retyping it) collapses whitespace
+// differently than it was generated.
+export function invigilatorTempPassword(orgName: string, orgSlug: string) {
+  return `${orgName.replace(/\s+/g, "")}@#${orgSlug}`;
+}
+
 export function slugify(name: string) {
   return name
     .trim()

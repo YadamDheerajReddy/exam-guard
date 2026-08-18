@@ -2,14 +2,27 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  LayoutDashboard,
+  Upload,
+  Users,
+  Building2,
+  CalendarDays,
+  ShieldCheck,
+  Radio,
+  ScrollText,
+  type LucideIcon,
+} from "lucide-react";
 
-const links = [
-  { href: "/admin", label: "Dashboard" },
-  { href: "/admin/roster", label: "Roster Upload" },
-  { href: "/admin/students", label: "Students" },
-  { href: "/admin/halls", label: "Halls" },
-  { href: "/admin/exams", label: "Exams" },
-  { href: "/admin/invigilators", label: "Invigilators" },
+const links: { href: string; label: string; icon: LucideIcon }[] = [
+  { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/admin/roster", label: "Roster Upload", icon: Upload },
+  { href: "/admin/students", label: "Students", icon: Users },
+  { href: "/admin/halls", label: "Halls", icon: Building2 },
+  { href: "/admin/exams", label: "Exams", icon: CalendarDays },
+  { href: "/admin/invigilators", label: "Invigilators", icon: ShieldCheck },
+  { href: "/admin/attendance", label: "Live Attendance", icon: Radio },
+  { href: "/admin/audit-log", label: "Audit Log", icon: ScrollText },
 ];
 
 export function AdminNav() {
@@ -22,6 +35,7 @@ export function AdminNav() {
           link.href === "/admin"
             ? pathname === "/admin"
             : pathname.startsWith(link.href);
+        const Icon = link.icon;
 
         return (
           <Link
@@ -29,11 +43,12 @@ export function AdminNav() {
             href={link.href}
             className={
               active
-                ? "rounded-lg bg-accent-tint px-3 py-2 text-sm font-semibold text-accent"
-                : "rounded-lg px-3 py-2 text-sm font-medium text-charcoal transition-colors hover:bg-surface"
+                ? "flex items-center gap-2.5 rounded-lg bg-accent-tint px-3 py-2 text-sm font-semibold text-accent"
+                : "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-charcoal transition-colors hover:bg-surface"
             }
           >
-            {link.label}
+            <Icon className="size-4 shrink-0" strokeWidth={2} />
+            <span className="truncate">{link.label}</span>
           </Link>
         );
       })}

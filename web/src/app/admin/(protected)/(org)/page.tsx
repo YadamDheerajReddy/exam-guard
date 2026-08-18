@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireOrgAdmin } from "@/lib/admin-context";
+import { Building2, CalendarDays, Info, Users, type LucideIcon } from "lucide-react";
 
 export default async function AdminDashboardPage() {
   const admin = await requireOrgAdmin();
@@ -39,10 +40,10 @@ export default async function AdminDashboardPage() {
     mappedByExam.set(row.exam_id, (mappedByExam.get(row.exam_id) ?? 0) + 1);
   }
 
-  const stats = [
-    { label: "Halls configured", value: hallsCount.count ?? 0, href: "/admin/halls" },
-    { label: "Exams created", value: examsCount.count ?? 0, href: "/admin/exams" },
-    { label: "Students mapped", value: mappingsCount.count ?? 0, href: "/admin/exams" },
+  const stats: { label: string; value: number; href: string; icon: LucideIcon }[] = [
+    { label: "Halls configured", value: hallsCount.count ?? 0, href: "/admin/halls", icon: Building2 },
+    { label: "Exams created", value: examsCount.count ?? 0, href: "/admin/exams", icon: CalendarDays },
+    { label: "Students mapped", value: mappingsCount.count ?? 0, href: "/admin/exams", icon: Users },
   ];
 
   return (
@@ -51,23 +52,30 @@ export default async function AdminDashboardPage() {
       <p className="mt-1 text-sm text-slate">Exam-cycle overview.</p>
 
       {org?.slug && (
-        <div className="mt-4 rounded-lg bg-accent-tint px-4 py-3 text-sm text-accent">
+        <div className="mt-4 flex items-center gap-2.5 rounded-lg bg-accent-tint px-4 py-3 text-sm text-accent">
+          <Info className="size-4 shrink-0" strokeWidth={2} />
           Your Organization ID is <span className="font-mono font-semibold">{org.slug}</span> —
           students need this, their roll number, and their password to log in.
         </div>
       )}
 
-      <div className="mt-6 grid grid-cols-3 gap-4">
-        {stats.map((stat) => (
-          <Link
-            key={stat.label}
-            href={stat.href}
-            className="rounded-lg border border-border bg-white p-5 transition-colors hover:border-accent"
-          >
-            <p className="text-2xl font-bold text-ink">{stat.value}</p>
-            <p className="mt-1 text-sm text-slate">{stat.label}</p>
-          </Link>
-        ))}
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {stats.map((stat) => {
+          const Icon = stat.icon;
+          return (
+            <Link
+              key={stat.label}
+              href={stat.href}
+              className="flex items-start justify-between gap-3 rounded-lg border border-border bg-white p-5 transition-all hover:-translate-y-0.5 hover:border-accent hover:shadow-sm"
+            >
+              <div>
+                <p className="text-2xl font-bold text-ink">{stat.value}</p>
+                <p className="mt-1 text-sm text-slate">{stat.label}</p>
+              </div>
+              <Icon className="size-5 shrink-0 text-accent" strokeWidth={2} />
+            </Link>
+          );
+        })}
       </div>
 
       <div className="mt-8">
@@ -78,15 +86,18 @@ export default async function AdminDashboardPage() {
           </Link>
         </div>
 
-        <div className="mt-3 overflow-hidden rounded-lg border border-border bg-white">
+        <div className="mt-3 overflow-x-auto overflow-hidden rounded-lg border border-border bg-white">
           {!upcomingExams.data || upcomingExams.data.length === 0 ? (
-            <p className="p-6 text-center text-sm text-slate">
-              No exams yet.{" "}
-              <Link href="/admin/exams" className="font-semibold text-accent">
-                Create one
-              </Link>
-              .
-            </p>
+            <div className="p-10 text-center">
+              <CalendarDays className="mx-auto size-8 text-slate" strokeWidth={1.5} />
+              <p className="mt-3 text-sm text-slate">
+                No exams yet.{" "}
+                <Link href="/admin/exams" className="font-semibold text-accent">
+                  Create one
+                </Link>
+                .
+              </p>
+            </div>
           ) : (
             <table className="w-full text-sm">
               <thead>
@@ -99,7 +110,7 @@ export default async function AdminDashboardPage() {
               </thead>
               <tbody>
                 {upcomingExams.data.map((exam) => (
-                  <tr key={exam.id} className="border-b border-border last:border-0">
+                  <tr key={exam.id} className="border-b border-border transition-colors last:border-0 hover:bg-surface">
                     <td className="px-4 py-3">
                       <Link
                         href={`/admin/exams/${exam.id}/mapping`}

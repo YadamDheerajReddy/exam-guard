@@ -1,11 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { OrganizationForm } from "@/components/admin/organization-form";
+import { OrganizationsTable } from "@/components/admin/organizations-table";
 
 export default async function OrganizationsPage() {
   const supabase = await createClient();
   const { data: orgs } = await supabase
     .from("organizations")
-    .select("id, name, type, created_at")
+    .select("id, name, type, is_suspended, created_at")
     .order("created_at", { ascending: false });
 
   const orgIds = orgs?.map((o) => o.id) ?? [];
@@ -34,36 +35,16 @@ export default async function OrganizationsPage() {
         <OrganizationForm />
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-border bg-white">
-        {!orgs || orgs.length === 0 ? (
-          <p className="p-6 text-center text-sm text-slate">No organizations yet.</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface text-left text-xs font-semibold uppercase tracking-wide text-slate">
-                <th className="px-4 py-3">Organization</th>
-                <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Admins</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orgs.map((org) => {
-                const orgAdmins = adminsByOrg.get(org.id) ?? [];
-                return (
-                  <tr key={org.id} className="border-b border-border last:border-0">
-                    <td className="px-4 py-3 font-semibold text-ink">{org.name}</td>
-                    <td className="px-4 py-3 text-charcoal">{org.type}</td>
-                    <td className="px-4 py-3 text-charcoal">
-                      {orgAdmins.length === 0
-                        ? "—"
-                        : orgAdmins.map((a) => `${a.full_name} (${a.email})`).join(", ")}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
+      <div className="mt-6">
+        <OrganizationsTable
+          orgs={(orgs ?? []).map((org) => ({
+            id: org.id,
+            name: org.name,
+            type: org.type,
+            isSuspended: org.is_suspended,
+            admins: (adminsByOrg.get(org.id) ?? []).map((a) => ({ fullName: a.full_name, email: a.email })),
+          }))}
+        />
       </div>
     </div>
   );

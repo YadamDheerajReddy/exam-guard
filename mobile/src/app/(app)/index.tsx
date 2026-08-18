@@ -3,79 +3,34 @@ import { StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "rea
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useSession } from "@/context/session-context";
+import { useInvigilator } from "@/context/invigilator-context";
 import { useScanSession } from "@/context/scan-session-context";
 import { SyncStatusBar } from "@/components/sync-status-bar";
 import { Logo } from "@/components/logo";
-import { supabase } from "@/lib/supabase";
 import { fetchExams, type ExamSummary } from "@/lib/api";
 import { Colors, Radius } from "@/constants/theme";
 
-type Invigilator = { full_name: string; assigned_hall_id: string | null };
-type LookupState =
-  | { status: "loading" }
-  | { status: "ready"; invigilator: Invigilator }
-  | { status: "not-invigilator" }
-  | { status: "error"; message: string };
-
 export default function HomeScreen() {
   const router = useRouter();
-  const { session: authSession, signOut } = useSession();
+  const { signOut } = useSession();
+  // The (app) layout only renders this Stack once lookup.status is "ready"
+  // and mustChangePassword is false — this early return is just keeping
+  // TypeScript honest about that, not a state this screen expects to hit.
+  const { lookup } = useInvigilator();
   const { session: activeSession, presyncing, presyncError, startSession, endSession } = useScanSession();
-  const [lookup, setLookup] = useState<LookupState>({ status: "loading" });
   const [exams, setExams] = useState<ExamSummary[] | null>(null);
   const [examsError, setExamsError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!authSession) return;
-    setLookup({ status: "loading" });
-    supabase
-      .from("invigilators")
-      .select("full_name, assigned_hall_id")
-      .eq("id", authSession.user.id)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (error) {
-          setLookup({ status: "error", message: error.message });
-          return;
-        }
-        if (!data) {
-          setLookup({ status: "not-invigilator" });
-          return;
-        }
-        setLookup({ status: "ready", invigilator: data });
-      });
-  }, [authSession]);
+  const invigilator = lookup.status === "ready" ? lookup.invigilator : null;
 
   useEffect(() => {
-    if (lookup.status !== "ready" || !lookup.invigilator.assigned_hall_id || activeSession) return;
+    if (!invigilator?.assignedHallId || activeSession) return;
     fetchExams()
       .then(setExams)
       .catch((err) => setExamsError(err instanceof Error ? err.message : "Couldn't load exams."));
-  }, [lookup, activeSession]);
+  }, [invigilator?.assignedHallId, activeSession]);
 
-  if (lookup.status === "loading") return null;
-
-  if (lookup.status === "not-invigilator" || lookup.status === "error") {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.centerCard}>
-          <Text style={styles.title}>
-            {lookup.status === "not-invigilator" ? "Not an invigilator account" : "Couldn't load your profile"}
-          </Text>
-          <Text style={styles.subtitle}>
-            {lookup.status === "not-invigilator"
-              ? `${authSession?.user.email} signed in successfully, but there's no matching row in the invigilators table. Ask an admin to add one, or sign out and use an invigilator account instead.`
-              : lookup.message}
-          </Text>
-          <TouchableOpacity style={styles.button} onPress={() => signOut()}>
-            <Text style={styles.buttonText}>Sign out</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const { invigilator } = lookup;
+  if (!invigilator) return null;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -85,7 +40,12 @@ export default function HomeScreen() {
           <Logo size={20} withWordmark={false} />
           <View>
             <Text style={styles.title}>Invigilator Scanner</Text>
-            <Text style={styles.subtitle}>Welcome, {invigilator.full_name}</Text>
+            <Text style={styles.subtitle}>Welcome, {invigilator.fullName}</Text>
+            {invigilator.assignedHallId && (
+              <Text style={styles.hallBadge}>
+                Assigned hall: {invigilator.assignedHallBuildingName} · {invigilator.assignedHallRoomNumber}
+              </Text>
+            )}
           </View>
         </View>
         <TouchableOpacity style={styles.signOutButton} onPress={() => signOut()}>
@@ -93,7 +53,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {!invigilator.assigned_hall_id ? (
+      {!invigilator.assignedHallId ? (
         <View style={styles.placeholder}>
           <Text style={styles.placeholderText}>
             No hall assigned yet. Ask your admin to assign you to a hall (Invigilators page) before you can scan.
@@ -182,6 +142,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 18, fontWeight: "700", color: Colors.ink },
   h2: { fontSize: 16, fontWeight: "700", color: Colors.ink, marginBottom: 12 },
   subtitle: { marginTop: 2, fontSize: 13, color: Colors.slate },
+  hallBadge: { marginTop: 2, fontSize: 12, fontWeight: "600", color: Colors.accent },
   caption: { marginTop: 2, fontSize: 12, color: Colors.slate },
   mono: { marginTop: 8, fontSize: 14, fontWeight: "500", color: Colors.charcoal },
   signOutButton: {
@@ -248,14 +209,4 @@ const styles = StyleSheet.create({
   secondaryButtonText: { color: Colors.charcoal, fontSize: 14, fontWeight: "600" },
   linkButton: { marginTop: 14, alignItems: "center" },
   linkText: { color: Colors.accent, fontSize: 13, fontWeight: "600" },
-  centerCard: { flex: 1, justifyContent: "center", gap: 12 },
-  button: {
-    marginTop: 12,
-    alignSelf: "flex-start",
-    backgroundColor: Colors.accent,
-    borderRadius: Radius,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  buttonText: { color: Colors.white, fontSize: 14, fontWeight: "600" },
 });

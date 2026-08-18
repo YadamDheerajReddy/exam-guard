@@ -1,32 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Image, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Colors, Radius } from "@/constants/theme";
 import type { ScanOutcome } from "@/lib/scan-decision";
-
-const AUTO_CONFIRM_MS = 1800;
+import type { ExamSummary } from "@/lib/api";
 
 type Props = {
   outcome: ScanOutcome;
+  exam: ExamSummary;
   // Present only for the VERIFIED case — every other outcome is
   // informational and gets recorded automatically without a tap.
   onConfirm?: () => void;
   onDismiss: () => void;
 };
 
-export function VerificationResultCard({ outcome, onConfirm, onDismiss }: Props) {
-  const firedRef = useRef(false);
-
-  useEffect(() => {
-    if (outcome.kind !== "VERIFIED" || !onConfirm) return;
-    firedRef.current = false;
-    const timeout = setTimeout(() => {
-      firedRef.current = true;
-      onConfirm();
-    }, AUTO_CONFIRM_MS);
-    return () => clearTimeout(timeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [outcome]);
-
+export function VerificationResultCard({ outcome, exam, onConfirm, onDismiss }: Props) {
   if (outcome.kind === "NOT_FOUND") {
     return (
       <View style={[styles.overlay, styles.neutralBg]}>
@@ -60,14 +47,20 @@ export function VerificationResultCard({ outcome, onConfirm, onDismiss }: Props)
         <View style={styles.card}>
           <Text style={[styles.chip, styles.verifiedChip]}>VERIFIED</Text>
           <CandidateInfo roster={roster} />
-          <Text style={styles.seat}>Seat {roster.seat_number}</Text>
-          <TouchableOpacity
-            style={styles.verifyButton}
-            onPress={() => {
-              firedRef.current = true;
-              onConfirm?.();
-            }}
-          >
+          <ExamInfo exam={exam} />
+          <View style={styles.placeRow}>
+            <View style={styles.placeBox}>
+              <Text style={styles.placeLabel}>Hall</Text>
+              <Text style={styles.placeValue}>
+                {roster.hall_building_name} · {roster.hall_room_number}
+              </Text>
+            </View>
+            <View style={styles.placeBox}>
+              <Text style={styles.placeLabel}>Seat</Text>
+              <Text style={styles.placeValue}>{roster.seat_number}</Text>
+            </View>
+          </View>
+          <TouchableOpacity style={styles.verifyButton} onPress={() => onConfirm?.()}>
             <Text style={styles.verifyButtonText}>Verify</Text>
           </TouchableOpacity>
         </View>
@@ -81,9 +74,11 @@ export function VerificationResultCard({ outcome, onConfirm, onDismiss }: Props)
         <View style={styles.card}>
           <Text style={[styles.chip, styles.alertChip]}>WRONG HALL</Text>
           <CandidateInfo roster={roster} />
+          <ExamInfo exam={exam} />
           <View style={styles.redirectBox}>
+            <Text style={styles.redirectLabel}>Correct hall &amp; seat</Text>
             <Text style={styles.redirectText}>
-              Correct Hall: {roster.hall_building_name} · {roster.hall_room_number}
+              {roster.hall_building_name} · {roster.hall_room_number} — Seat {roster.seat_number}
             </Text>
           </View>
           <DismissButton onPress={onDismiss} />
@@ -98,6 +93,19 @@ export function VerificationResultCard({ outcome, onConfirm, onDismiss }: Props)
       <View style={styles.card}>
         <Text style={[styles.chip, styles.pendingChip]}>ALREADY VERIFIED</Text>
         <CandidateInfo roster={roster} />
+        <ExamInfo exam={exam} />
+        <View style={styles.placeRow}>
+          <View style={styles.placeBox}>
+            <Text style={styles.placeLabel}>Hall</Text>
+            <Text style={styles.placeValue}>
+              {roster.hall_building_name} · {roster.hall_room_number}
+            </Text>
+          </View>
+          <View style={styles.placeBox}>
+            <Text style={styles.placeLabel}>Seat</Text>
+            <Text style={styles.placeValue}>{roster.seat_number}</Text>
+          </View>
+        </View>
         <Text style={styles.message}>
           Already verified at {outcome.usedAt ? new Date(outcome.usedAt).toLocaleTimeString() : "an earlier time"}.
           If this is a mistake, use Manual Search.
@@ -108,7 +116,11 @@ export function VerificationResultCard({ outcome, onConfirm, onDismiss }: Props)
   );
 }
 
-function CandidateInfo({ roster }: { roster: { photo_url: string | null; full_name: string; roll_number: string; department: string } }) {
+function CandidateInfo({
+  roster,
+}: {
+  roster: { photo_url: string | null; full_name: string; roll_number: string; department: string };
+}) {
   const [enlarged, setEnlarged] = useState(false);
 
   return (
@@ -138,6 +150,19 @@ function CandidateInfo({ roster }: { roster: { photo_url: string | null; full_na
           </TouchableOpacity>
         </Modal>
       )}
+    </View>
+  );
+}
+
+function ExamInfo({ exam }: { exam: ExamSummary }) {
+  return (
+    <View style={styles.examBox}>
+      <Text style={styles.examCourse}>
+        {exam.courseCode} · {exam.courseTitle}
+      </Text>
+      <Text style={styles.examTime}>
+        {exam.examDate} · {exam.startTime}–{exam.endTime}
+      </Text>
     </View>
   );
 }
@@ -189,18 +214,50 @@ const styles = StyleSheet.create({
   name: { fontSize: 17, fontWeight: "600", color: Colors.ink },
   roll: { marginTop: 2, fontSize: 14, fontWeight: "500", color: Colors.charcoal },
   department: { marginTop: 2, fontSize: 13, color: Colors.slate },
-  seat: { marginTop: 14, fontSize: 22, fontWeight: "800", color: Colors.ink },
+  examBox: {
+    marginTop: 14,
+    alignSelf: "stretch",
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    paddingTop: 12,
+  },
+  examCourse: { fontSize: 14, fontWeight: "600", color: Colors.charcoal },
+  examTime: { marginTop: 2, fontSize: 12, color: Colors.slate },
+  placeRow: { flexDirection: "row", gap: 10, marginTop: 14, alignSelf: "stretch" },
+  placeBox: {
+    flex: 1,
+    backgroundColor: Colors.surface,
+    borderRadius: Radius,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  placeLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    color: Colors.slate,
+  },
+  placeValue: { marginTop: 2, fontSize: 16, fontWeight: "800", color: Colors.ink },
   message: { marginTop: 16, fontSize: 14, color: Colors.charcoal, textAlign: "center", lineHeight: 20 },
   hint: { marginTop: 8, fontSize: 13, color: Colors.slate, textAlign: "center" },
   redirectBox: {
-    marginTop: 16,
+    marginTop: 14,
     backgroundColor: Colors.alertTint,
     borderRadius: Radius,
     paddingVertical: 10,
     paddingHorizontal: 14,
     alignSelf: "stretch",
   },
-  redirectText: { color: Colors.alert, fontSize: 15, fontWeight: "700", textAlign: "center" },
+  redirectLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    color: Colors.alert,
+    textAlign: "center",
+  },
+  redirectText: { marginTop: 2, color: Colors.alert, fontSize: 16, fontWeight: "700", textAlign: "center" },
   verifyButton: {
     marginTop: 20,
     backgroundColor: Colors.verified,

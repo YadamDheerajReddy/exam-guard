@@ -39,7 +39,7 @@ There is no test suite configured in either app — don't assume one exists or i
 
 Both apps are also registered in `.claude/launch.json` as `examguard-web` (port 3000) and `examguard-mobile-web` (port 8081) for the Browser-pane preview tooling.
 
-Env vars: `web/.env.example` lists the required Supabase + `BARCODE_TOKEN_SECRET` vars for `web/.env.local`. Mobile reads `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, and `EXPO_PUBLIC_API_BASE_URL` from `mobile/.env` — the last one must be the machine's LAN IP (not `localhost`) when testing on a physical phone via Expo Go, since `localhost` from the phone resolves to the phone itself.
+Env vars: `web/.env.example` lists the required Supabase + `BARCODE_TOKEN_SECRET` + `GMAIL_USER`/`GMAIL_APP_PASSWORD` vars for `web/.env.local`. Mobile reads `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, and `EXPO_PUBLIC_API_BASE_URL` from `mobile/.env` — the last one must be the machine's LAN IP (not `localhost`) when testing on a physical phone via Expo Go, since `localhost` from the phone resolves to the phone itself.
 
 ## Before writing code: check for framework drift
 

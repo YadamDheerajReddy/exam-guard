@@ -299,7 +299,7 @@ export function RosterUploader() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 xl:grid-cols-3">
         <div className="rounded-lg border border-border bg-white p-5">
           <h2 className="text-sm font-semibold text-charcoal">Upload a CSV</h2>
           <p className="mt-1 text-sm text-slate">
@@ -368,12 +368,12 @@ export function RosterUploader() {
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               placeholder="Search by roll number or name"
-              className="flex-1 rounded-lg border border-border px-3 py-1.5 text-sm text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint"
+              className="min-w-0 flex-1 rounded-lg border border-border px-3 py-1.5 text-sm text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint"
             />
             <button
               onClick={handleSearch}
               disabled={searching}
-              className="rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-charcoal hover:bg-surface disabled:opacity-60"
+              className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-charcoal hover:bg-surface disabled:opacity-60"
             >
               {searching ? "…" : "Search"}
             </button>
@@ -382,7 +382,7 @@ export function RosterUploader() {
             <ul className="mt-3 flex max-h-40 flex-col gap-1 overflow-auto">
               {searchResults.map((s) => (
                 <li key={s.id} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="truncate text-charcoal">
+                  <span className="min-w-0 flex-1 truncate text-charcoal">
                     <span className="font-mono">{s.rollNumber}</span> {s.fullName}
                   </span>
                   <button
@@ -401,12 +401,12 @@ export function RosterUploader() {
 
       {rows.length > 0 && (
         <div className="rounded-lg border border-border bg-white">
-          <div className="flex items-center justify-between border-b border-border px-5 py-3">
+          <div className="flex flex-col gap-3 border-b border-border px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-charcoal">
               {rows.length} student{rows.length === 1 ? "" : "s"} listed ·{" "}
               {createdCount} added, {failedCount} need fixing, {uploadable.length} ready
             </p>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               {failedCount > 0 && (
                 <button
                   onClick={downloadErrorReport}

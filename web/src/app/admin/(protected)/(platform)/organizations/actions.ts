@@ -2,8 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { createAuthUser, deleteAuthUser } from "@/lib/create-auth-account";
 import { requireSuperAdmin } from "@/lib/admin-context";
+import { sendMail } from "@/lib/mailer";
+import { orgAdminCreatedEmail } from "@/lib/email-templates";
+import { absoluteUrl } from "@/lib/site-url";
 
 const ORG_TYPES = ["COLLEGE", "UNIVERSITY", "SCHOOL", "OTHER"] as const;
 
@@ -68,6 +72,15 @@ export async function createOrganizationWithAdmin(
     return { error: adminError.message };
   }
 
+  const { subject, html } = orgAdminCreatedEmail({
+    orgName,
+    fullName: adminFullName,
+    email: adminEmail,
+    tempPassword: created.tempPassword,
+    loginUrl: await absoluteUrl("/admin/login"),
+  });
+  await sendMail({ to: adminEmail, subject, html });
+
   revalidatePath("/admin/organizations");
   return {
     success: true,
@@ -75,4 +88,20 @@ export async function createOrganizationWithAdmin(
     adminEmail,
     tempPassword: created.tempPassword,
   };
+}
+
+export async function setOrganizationSuspended(
+  organizationId: string,
+  suspended: boolean,
+): Promise<{ error?: string }> {
+  await requireSuperAdmin();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("organizations")
+    .update({ is_suspended: suspended })
+    .eq("id", organizationId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/admin/organizations");
+  return {};
 }

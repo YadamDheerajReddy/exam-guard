@@ -5,6 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createAuthUser, deleteAuthUser } from "@/lib/create-auth-account";
 import { requireOrgAdmin } from "@/lib/admin-context";
+import { invigilatorTempPassword } from "@/lib/student-auth";
+import { sendMail } from "@/lib/mailer";
+import { invigilatorCreatedEmail } from "@/lib/email-templates";
 
 export type CreateInvigilatorState =
   | { error: string }
@@ -28,6 +31,15 @@ export async function createInvigilator(
 
   const service = createAdminClient();
 
+  const { data: org } = await service
+    .from("organizations")
+    .select("name, slug")
+    .eq("id", admin.organizationId)
+    .maybeSingle();
+  if (!org?.slug) {
+    return { error: "Set your organization's Organization ID (Change Password page) before adding invigilators." };
+  }
+
   const { data: existing } = await service
     .from("invigilators")
     .select("id")
@@ -35,7 +47,11 @@ export async function createInvigilator(
     .maybeSingle();
   if (existing) return { error: "An invigilator with that email already exists." };
 
-  const created = await createAuthUser(email);
+  // Deterministic like the student temp password — {organizationName}@#{organizationId}
+  // — so an admin printing exam-day instructions can hand every invigilator
+  // the same login line rather than looking up individual passwords.
+  const tempPassword = invigilatorTempPassword(org.name, org.slug);
+  const created = await createAuthUser(email, tempPassword);
   if (!created.ok) return { error: created.error };
 
   const { error: insertError } = await service.from("invigilators").insert({
@@ -44,12 +60,21 @@ export async function createInvigilator(
     email,
     assigned_hall_id: assignedHallId,
     organization_id: admin.organizationId,
+    must_change_password: true,
   });
 
   if (insertError) {
     await deleteAuthUser(created.userId);
     return { error: insertError.message };
   }
+
+  const { subject, html } = invigilatorCreatedEmail({
+    orgName: org.name,
+    fullName,
+    email,
+    tempPassword: created.tempPassword,
+  });
+  await sendMail({ to: email, subject, html });
 
   revalidatePath("/admin/invigilators");
   return { success: true, email, tempPassword: created.tempPassword };

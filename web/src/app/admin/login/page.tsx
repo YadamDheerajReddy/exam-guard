@@ -3,13 +3,14 @@
 import { useActionState } from "react";
 import { adminLogin } from "../actions";
 import { Logo } from "@/components/logo";
+import { AlertCircle } from "lucide-react";
 
 export default function AdminLoginPage() {
   const [state, formAction, pending] = useActionState(adminLogin, undefined);
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center px-6 py-16">
-      <div className="w-full max-w-sm rounded-lg border border-border bg-white p-8 shadow-sm">
+      <div className="w-full max-w-sm animate-in fade-in slide-in-from-bottom-2 rounded-lg border border-border bg-white p-8 shadow-sm duration-300">
         <Logo size={28} />
         <h1 className="mt-4 text-xl font-bold text-ink">Admin Console</h1>
         <p className="mt-1 text-sm text-slate">
@@ -46,7 +47,8 @@ export default function AdminLoginPage() {
           </div>
 
           {state?.error && (
-            <p className="rounded-lg bg-alert-tint px-3 py-2 text-sm text-alert">
+            <p className="animate-in fade-in flex items-center gap-2 rounded-lg bg-alert-tint px-3 py-2 text-sm text-alert">
+              <AlertCircle className="size-4 shrink-0" strokeWidth={2} />
               {state.error}
             </p>
           )}

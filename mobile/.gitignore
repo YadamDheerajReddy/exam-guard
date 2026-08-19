@@ -30,8 +30,10 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# env files — .env holds real Supabase/API credentials for local dev,
+# never meant to be committed (mobile/.env was tracked in git history
+# through an oversight here; see README for the vars it needs)
+.env*
 
 # typescript
 *.tsbuildinfo

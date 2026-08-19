@@ -1,15 +1,18 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Link from "next/link";
 import { changePassword } from "@/app/admin/(protected)/change-password/actions";
 import { AlertCircle, KeyRound } from "lucide-react";
 
 export function ChangePasswordForm({
   needsOrganizationId,
   suggestions,
+  isSchool,
 }: {
   needsOrganizationId: boolean;
   suggestions: string[];
+  isSchool: boolean;
 }) {
   const [state, formAction, pending] = useActionState(changePassword, undefined);
   const [organizationId, setOrganizationId] = useState("");
@@ -92,6 +95,63 @@ export function ChangePasswordForm({
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {needsOrganizationId && (
+            <div className="flex flex-col gap-4 rounded-lg border border-border bg-surface p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-charcoal">
+                Data protection (DPDP Act, 2023)
+              </p>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="grievanceOfficerName" className="text-sm font-semibold text-charcoal">
+                  Grievance Officer name
+                </label>
+                <input
+                  id="grievanceOfficerName"
+                  name="grievanceOfficerName"
+                  type="text"
+                  required
+                  placeholder="Full name of the person students can contact"
+                  className="rounded-lg border border-border bg-white px-3 py-2 text-sm text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="grievanceOfficerEmail" className="text-sm font-semibold text-charcoal">
+                  Grievance Officer email
+                </label>
+                <input
+                  id="grievanceOfficerEmail"
+                  name="grievanceOfficerEmail"
+                  type="email"
+                  required
+                  placeholder="grievance@yourinstitution.edu"
+                  className="rounded-lg border border-border bg-white px-3 py-2 text-sm text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint"
+                />
+                <p className="text-xs text-slate">
+                  Shown to your students in their Privacy page, as required under the Act.
+                </p>
+              </div>
+
+              <label className="flex items-start gap-2.5 text-sm text-charcoal">
+                <input
+                  name="dpdpAcknowledged"
+                  type="checkbox"
+                  required
+                  className="mt-0.5 size-4 shrink-0 accent-accent"
+                />
+                <span>
+                  I confirm this institution has lawfully informed its students and staff about how
+                  ExamGuard processes their personal data (see our{" "}
+                  <Link href="/privacy" target="_blank" className="font-semibold text-accent hover:text-accent-hover">
+                    Privacy Policy
+                  </Link>
+                  ) and has obtained the necessary consent under the Digital Personal Data Protection
+                  Act, 2023{isSchool ? " — including verifiable parental/guardian consent, since this institution enrolls minors" : ""}.
+                </span>
+              </label>
             </div>
           )}
 

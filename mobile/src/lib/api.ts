@@ -128,3 +128,27 @@ export async function changeInvigilatorPassword(newPassword: string): Promise<vo
     body: JSON.stringify({ newPassword }),
   });
 }
+
+// Called from the login screen, before there's any session — can't go
+// through request(), which always demands a bearer token first. Redemption
+// (setting the actual new password) happens on a web page the emailed link
+// opens, not in-app, so this only ever fires the request half.
+export async function requestInvigilatorPasswordReset(email: string): Promise<{ message: string }> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}/api/invigilator/request-password-reset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+  } catch {
+    throw new ApiError(`Can't reach the server at ${API_BASE_URL}. Check the connection.`, 0);
+  }
+
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new ApiError(body?.error ?? `Request failed (${res.status}).`, res.status);
+  }
+
+  return res.json() as Promise<{ message: string }>;
+}

@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentStudent } from "@/lib/student-context";
 import { studentLogout } from "../actions";
 import { Logo } from "@/components/logo";
-import { LogOut } from "lucide-react";
+import { LogOut, ShieldCheck } from "lucide-react";
 
 export default async function ProtectedStudentLayout({
   children,
@@ -24,7 +25,7 @@ export default async function ProtectedStudentLayout({
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-between gap-4 border-b border-border bg-white px-4 py-4 sm:px-6">
+      <header className="flex items-center justify-between gap-4 border-b border-border bg-white px-4 py-4 print:hidden sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <Logo size={22} withWordmark={false} />
           <div className="min-w-0">
@@ -32,15 +33,24 @@ export default async function ProtectedStudentLayout({
             <p className="truncate text-xs font-mono text-slate">{student.rollNumber}</p>
           </div>
         </div>
-        <form action={studentLogout} className="shrink-0">
-          <button className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-charcoal transition-colors hover:bg-surface">
-            <LogOut className="size-4" strokeWidth={2} />
-            Sign out
-          </button>
-        </form>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href="/student/privacy"
+            className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-charcoal transition-colors hover:bg-surface"
+          >
+            <ShieldCheck className="size-4" strokeWidth={2} />
+            <span className="hidden sm:inline">Privacy</span>
+          </Link>
+          <form action={studentLogout}>
+            <button className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-charcoal transition-colors hover:bg-surface">
+              <LogOut className="size-4" strokeWidth={2} />
+              <span className="hidden sm:inline">Sign out</span>
+            </button>
+          </form>
+        </div>
       </header>
 
-      <main className="flex-1 bg-surface px-4 py-6 sm:px-6 sm:py-8">{children}</main>
+      <main className="flex-1 bg-surface px-4 py-6 print:p-0 sm:px-6 sm:py-8">{children}</main>
     </div>
   );
 }

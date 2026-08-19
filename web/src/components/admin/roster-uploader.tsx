@@ -37,7 +37,9 @@ const emptyRow = (): RosterRow => ({
   photoUrl: "",
 });
 
-export function RosterUploader() {
+export function RosterUploader({ isSchool = false }: { isSchool?: boolean }) {
+  const fieldLabel = isSchool ? "class" : "department";
+  const fieldLabelTitle = isSchool ? "Class" : "Department";
   const [entries, setEntries] = useState<Entry[]>([]);
   const [submissions, setSubmissions] = useState<Map<number, Submission>>(new Map());
   const [photos, setPhotos] = useState<Map<number, PhotoState>>(new Map());
@@ -57,12 +59,12 @@ export function RosterUploader() {
   // search result never carried an email to begin with).
   const validated = useMemo(() => {
     const newRows = entries.filter((e) => e.kind === "new").map((e) => e.row);
-    const newValidated = validateRosterRows(newRows);
+    const newValidated = validateRosterRows(newRows, fieldLabel);
     let i = 0;
     return entries.map((e) =>
       e.kind === "existing" ? { ...e.row, error: null } : newValidated[i++],
     );
-  }, [entries]);
+  }, [entries, fieldLabel]);
 
   const rows = entries.map((entry, i) => ({
     entry,
@@ -101,7 +103,7 @@ export function RosterUploader() {
         const missing = REQUIRED_COLUMNS.filter((c) => !mapped.includes(c));
         if (missing.length > 0) {
           setParseError(
-            `Missing required column(s): ${missing.join(", ")}. Expected headers: roll_number, full_name, email, department (photo_url optional).`,
+            `Missing required column(s): ${missing.join(", ")}. Expected headers: roll_number, full_name, email, ${fieldLabel} (photo_url optional).`,
           );
           return;
         }
@@ -250,7 +252,7 @@ export function RosterUploader() {
   function downloadErrorReport() {
     const failed = rows.filter((r) => r.error || r.submission?.status === "server-error");
     const csv = [
-      "roll_number,full_name,email,department,error",
+      `roll_number,full_name,email,${fieldLabel},error`,
       ...failed.map((r) =>
         [
           r.entry.row.rollNumber,
@@ -299,11 +301,20 @@ export function RosterUploader() {
 
   return (
     <div className="flex flex-col gap-5">
+      <p className="rounded-lg bg-accent-tint px-3 py-2 text-xs text-accent">
+        Uploading this roster is covered by the data protection acknowledgment made when this Organization ID
+        was set up — see the{" "}
+        <a href="/privacy" target="_blank" className="font-semibold underline">
+          Privacy Policy
+        </a>
+        . Only upload students your institution has informed about this processing.
+      </p>
+
       <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 xl:grid-cols-3">
         <div className="rounded-lg border border-border bg-white p-5">
           <h2 className="text-sm font-semibold text-charcoal">Upload a CSV</h2>
           <p className="mt-1 text-sm text-slate">
-            Columns: roll_number, full_name, email, department, photo_url (optional).
+            Columns: roll_number, full_name, email, {fieldLabel}, photo_url (optional).
           </p>
           <input
             ref={fileInputRef}
@@ -347,7 +358,7 @@ export function RosterUploader() {
             <input
               value={manualRow.department}
               onChange={(e) => setManualRow({ ...manualRow, department: e.target.value })}
-              placeholder="Department"
+              placeholder={fieldLabelTitle}
               className="rounded-lg border border-border px-3 py-1.5 text-sm text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint"
             />
             <button
@@ -440,7 +451,7 @@ export function RosterUploader() {
                   <th className="px-4 py-2">Roll number</th>
                   <th className="px-4 py-2">Name</th>
                   <th className="px-4 py-2">Email</th>
-                  <th className="px-4 py-2">Department</th>
+                  <th className="px-4 py-2">{fieldLabelTitle}</th>
                   <th className="px-4 py-2">Photo</th>
                   <th className="px-4 py-2">Status</th>
                   <th className="px-4 py-2" />

@@ -35,10 +35,11 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  const isAdminRoute = pathname.startsWith("/admin") && pathname !== "/admin/login";
-  // reset-password is the landing page for a student who's locked out and
+  // reset-password is the landing page for someone who's locked out and
   // has no session by definition — gating it behind one would make the
   // "forgot password" flow unreachable for the exact case it exists for.
+  const publicAdminPaths = ["/admin/login", "/admin/reset-password"];
+  const isAdminRoute = pathname.startsWith("/admin") && !publicAdminPaths.includes(pathname);
   const publicStudentPaths = ["/student/login", "/student/reset-password"];
   const isStudentRoute = pathname.startsWith("/student") && !publicStudentPaths.includes(pathname);
 

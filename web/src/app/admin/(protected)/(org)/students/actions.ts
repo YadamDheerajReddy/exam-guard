@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireOrgAdmin } from "@/lib/admin-context";
+import { eraseOrAnonymizeStudent } from "@/lib/student-erasure";
 
 export type ResetPasswordResult =
   | { ok: true; tempPassword: string }
@@ -49,4 +50,68 @@ export async function resetStudentPassword(studentId: string): Promise<ResetPass
 
   revalidatePath("/admin/students");
   return { ok: true, tempPassword };
+}
+
+export type UpdateStudentState = { error?: string } | undefined;
+
+export async function updateStudent(
+  studentId: string,
+  _prevState: UpdateStudentState,
+  formData: FormData,
+): Promise<UpdateStudentState> {
+  const admin = await requireOrgAdmin();
+  const service = createAdminClient();
+
+  const fullName = String(formData.get("fullName") ?? "").trim();
+  const rollNumber = String(formData.get("rollNumber") ?? "").trim();
+  const department = String(formData.get("department") ?? "").trim();
+
+  if (!fullName) return { error: "Name is required." };
+  if (!rollNumber) return { error: "Roll number is required." };
+  if (!department) return { error: "This field is required." };
+
+  const { data: existing } = await service
+    .from("students")
+    .select("id")
+    .eq("organization_id", admin.organizationId)
+    .eq("roll_number", rollNumber)
+    .neq("id", studentId)
+    .maybeSingle();
+  if (existing) return { error: "Another student already has that roll number." };
+
+  const { error } = await service
+    .from("students")
+    .update({ full_name: fullName, roll_number: rollNumber, department })
+    .eq("id", studentId)
+    .eq("organization_id", admin.organizationId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/students");
+  return undefined;
+}
+
+export type DeleteStudentResult = { error?: string; action?: "anonymized" | "deleted" };
+
+// For a student who isn't returning next academic year. Reuses the same
+// anonymize-or-delete decision as a formal DPDP erasure request — a
+// student with verification history keeps an anonymized, locked-out
+// record (their scans stay part of the audit trail); one with none is
+// removed outright.
+export async function deleteStudent(studentId: string): Promise<DeleteStudentResult> {
+  const admin = await requireOrgAdmin();
+  const service = createAdminClient();
+
+  const { data: student } = await service
+    .from("students")
+    .select("id")
+    .eq("id", studentId)
+    .eq("organization_id", admin.organizationId)
+    .maybeSingle();
+  if (!student) return { error: "Student not found." };
+
+  const { action } = await eraseOrAnonymizeStudent(service, studentId);
+
+  revalidatePath("/admin/students");
+  return { action };
 }

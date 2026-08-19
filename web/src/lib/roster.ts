@@ -23,6 +23,12 @@ const HEADER_ALIASES: Record<string, keyof RosterRow> = {
   email: "email",
   department: "department",
   dept: "department",
+  // Schools track a class/grade in this same column rather than a
+  // department — accepted as aliases regardless of org type so a school's
+  // own CSV export (which is unlikely to say "department") still parses.
+  class: "department",
+  grade: "department",
+  "class/grade": "department",
   photo_url: "photoUrl",
   photourl: "photoUrl",
   photo: "photoUrl",
@@ -34,7 +40,7 @@ export function normalizeHeader(header: string): keyof RosterRow | null {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function validateRosterRows(rows: RosterRow[]): ValidatedRosterRow[] {
+export function validateRosterRows(rows: RosterRow[], fieldLabel = "department"): ValidatedRosterRow[] {
   const rollSeen = new Set<string>();
   const emailSeen = new Set<string>();
 
@@ -50,7 +56,7 @@ export function validateRosterRows(rows: RosterRow[]): ValidatedRosterRow[] {
     else if (!fullName) error = "Missing name.";
     else if (!email) error = "Missing email.";
     else if (!EMAIL_RE.test(email)) error = "Invalid email format.";
-    else if (!department) error = "Missing department.";
+    else if (!department) error = `Missing ${fieldLabel}.`;
     else if (rollSeen.has(rollNumber)) {
       error = "Duplicate roll number in this list.";
     } else if (emailSeen.has(email)) {

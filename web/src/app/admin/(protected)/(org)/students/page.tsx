@@ -12,11 +12,15 @@ export default async function StudentsPage({
   const { missingPhoto } = await searchParams;
   const supabase = await createClient();
 
-  const { data: students } = await supabase
-    .from("students")
-    .select("id, roll_number, full_name, email, department, photo_url, is_active")
-    .eq("organization_id", admin.organizationId)
-    .order("roll_number", { ascending: true });
+  const [{ data: students }, { data: org }] = await Promise.all([
+    supabase
+      .from("students")
+      .select("id, roll_number, full_name, email, department, photo_url, is_active")
+      .eq("organization_id", admin.organizationId)
+      .order("roll_number", { ascending: true }),
+    supabase.from("organizations").select("type").eq("id", admin.organizationId).maybeSingle(),
+  ]);
+  const isSchool = org?.type === "SCHOOL";
 
   const photoPaths = (students ?? [])
     .map((s) => s.photo_url)
@@ -44,6 +48,7 @@ export default async function StudentsPage({
       <div className="mt-6">
         <StudentsTable
           initialMissingPhotoOnly={missingPhoto === "1"}
+          isSchool={isSchool}
           students={(students ?? []).map((s) => ({
             id: s.id,
             rollNumber: s.roll_number,

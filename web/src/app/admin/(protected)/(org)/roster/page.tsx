@@ -10,9 +10,10 @@ export default async function RosterPage() {
 
   const { data: org } = await supabase
     .from("organizations")
-    .select("slug")
+    .select("slug, type")
     .eq("id", admin.organizationId)
     .maybeSingle();
+  const isSchool = org?.type === "SCHOOL";
 
   // Server Component: runs fresh per request, not memoized/re-rendered by
   // the React Compiler the way a Client Component would be, so "now" here
@@ -59,7 +60,7 @@ export default async function RosterPage() {
       </p>
 
       <div className="mt-6">
-        <RosterUploader />
+        <RosterUploader isSchool={isSchool} />
       </div>
 
       <div className="mt-8">

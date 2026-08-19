@@ -41,6 +41,21 @@ export async function signRotatingDisplayToken(params: { mappingId: string; exam
   };
 }
 
+// School students typically have no phone to hold a rotating code steady
+// at the door, so their pass is a single QR meant to be printed on paper
+// instead. It carries `kind: "display"` — the same claim
+// verifyDisplayToken() checks below — so it goes through the exact same
+// server-side verification path as the rotating code; the only difference
+// is the caller supplies a long expiry (through the exam window, matching
+// the base barcode_token's own convention) instead of the fixed 90s TTL.
+export async function signStaticDisplayToken(params: { mappingId: string; examId: string; expiresAt: Date }) {
+  return new SignJWT({ mapping_id: params.mappingId, exam_id: params.examId, kind: "display" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(Math.floor(params.expiresAt.getTime() / 1000))
+    .sign(getSecretKey());
+}
+
 export type DisplayTokenPayload = { mappingId: string; examId: string };
 export type VerifyDisplayTokenResult =
   | { ok: true; payload: DisplayTokenPayload }

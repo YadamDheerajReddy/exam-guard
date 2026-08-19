@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { type LucideIcon } from "lucide-react";
 import { ScanVisual } from "./scan-visual";
@@ -57,6 +58,13 @@ export function AuthShell({
             <Logo size={28} />
           </div>
           {children}
+          <p className="mt-6 text-center text-xs text-slate">
+            By continuing you agree to our{" "}
+            <Link href="/privacy" target="_blank" className="font-semibold text-accent hover:text-accent-hover">
+              Privacy Policy
+            </Link>
+            .
+          </p>
         </motion.div>
       </div>
     </main>

@@ -53,6 +53,8 @@ export function ForcedChangePassword() {
               onChangeText={setNewPassword}
               secureTextEntry
               autoComplete="new-password"
+              autoCapitalize="none"
+              autoCorrect={false}
               style={styles.input}
               placeholder="••••••••"
               placeholderTextColor={Colors.slate}
@@ -66,6 +68,8 @@ export function ForcedChangePassword() {
               onChangeText={setConfirmPassword}
               secureTextEntry
               autoComplete="new-password"
+              autoCapitalize="none"
+              autoCorrect={false}
               style={styles.input}
               placeholder="••••••••"
               placeholderTextColor={Colors.slate}

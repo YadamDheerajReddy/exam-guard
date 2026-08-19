@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Radio,
   ScrollText,
+  FileLock2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -23,6 +24,7 @@ const links: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/admin/invigilators", label: "Invigilators", icon: ShieldCheck },
   { href: "/admin/attendance", label: "Live Attendance", icon: Radio },
   { href: "/admin/audit-log", label: "Audit Log", icon: ScrollText },
+  { href: "/admin/data-requests", label: "Data Requests", icon: FileLock2 },
 ];
 
 export function AdminNav() {

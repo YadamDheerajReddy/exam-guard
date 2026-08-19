@@ -20,6 +20,9 @@ export async function changePassword(
   const newPassword = String(formData.get("newPassword") ?? "");
   const confirmPassword = String(formData.get("confirmPassword") ?? "");
   const organizationIdInput = formData.get("organizationId");
+  const grievanceOfficerName = String(formData.get("grievanceOfficerName") ?? "").trim();
+  const grievanceOfficerEmail = String(formData.get("grievanceOfficerEmail") ?? "").trim();
+  const dpdpAcknowledged = formData.get("dpdpAcknowledged") === "on";
 
   if (newPassword.length < 8) {
     return { error: "Password must be at least 8 characters." };
@@ -32,7 +35,8 @@ export async function changePassword(
 
   // organizationId is only present in the form when the org doesn't have
   // one yet (see page.tsx) — a voluntary password change later omits it
-  // entirely, so we shouldn't require or touch it then.
+  // entirely, so we shouldn't require or touch it (or the DPDP fields
+  // below, captured at this same one-time onboarding step) then.
   let organizationSlug: string | null = null;
   if (organizationIdInput !== null) {
     const slug = slugify(String(organizationIdInput));
@@ -50,6 +54,16 @@ export async function changePassword(
     }
 
     organizationSlug = slug;
+
+    if (!grievanceOfficerName || !grievanceOfficerEmail) {
+      return { error: "A Grievance Officer name and email are required." };
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(grievanceOfficerEmail)) {
+      return { error: "Enter a valid Grievance Officer email." };
+    }
+    if (!dpdpAcknowledged) {
+      return { error: "You must confirm the data protection acknowledgment to continue." };
+    }
   }
 
   const supabase = await createClient();
@@ -70,7 +84,13 @@ export async function changePassword(
   if (organizationSlug && admin.organizationId) {
     const { error: orgError } = await service
       .from("organizations")
-      .update({ slug: organizationSlug })
+      .update({
+        slug: organizationSlug,
+        grievance_officer_name: grievanceOfficerName,
+        grievance_officer_email: grievanceOfficerEmail,
+        dpdp_acknowledged_at: new Date().toISOString(),
+        dpdp_acknowledged_by: admin.id,
+      })
       .eq("id", admin.organizationId);
     if (orgError) {
       return { error: orgError.message };

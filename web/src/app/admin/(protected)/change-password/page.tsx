@@ -13,17 +13,19 @@ export default async function ChangePasswordPage() {
 
   let suggestions: string[] = [];
   let needsOrganizationId = false;
+  let orgType: string | null = null;
 
   if (admin.organizationId) {
     const supabase = await createClient();
     const { data: org } = await supabase
       .from("organizations")
-      .select("name, slug")
+      .select("name, slug, type")
       .eq("id", admin.organizationId)
       .maybeSingle();
 
     if (org && !org.slug) {
       needsOrganizationId = true;
+      orgType = org.type;
       const candidates = suggestOrganizationIds(org.name);
       // Checking whether an Organization ID is taken is inherently a
       // cross-tenant question — org_admin_select_own_organization only
@@ -44,6 +46,7 @@ export default async function ChangePasswordPage() {
     <ChangePasswordForm
       needsOrganizationId={needsOrganizationId}
       suggestions={suggestions}
+      isSchool={orgType === "SCHOOL"}
     />
   );
 }

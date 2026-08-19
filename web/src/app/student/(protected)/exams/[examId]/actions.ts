@@ -3,8 +3,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireStudent } from "@/lib/student-context";
 import { computeRevealState } from "@/lib/reveal";
-import { safeTimeZone } from "@/lib/timezone";
-import { signRotatingDisplayToken } from "@/lib/barcode-token";
+import { safeTimeZone, zonedDateTimeToUtc } from "@/lib/timezone";
+import { signRotatingDisplayToken, signStaticDisplayToken } from "@/lib/barcode-token";
 
 export type ExamPassResult =
   | { ok: false; error: string }
@@ -22,6 +22,14 @@ export type ExamPassResult =
       checkedInAt: string | null;
       hall: { buildingName: string; roomNumber: string; seatNumber: string; capacity: number } | null;
       photoUrl: string | null;
+      studentFullName: string;
+      studentRollNumber: string;
+      // School students often have no phone to hold a live rotating code
+      // steady at the door — for them this pass is a single QR meant to be
+      // printed, not refreshed. displayTokenExpiresAt is still meaningful
+      // (through the exam window, not 90s) but the UI shouldn't show a
+      // countdown ring for it.
+      isStaticPass: boolean;
       // Null once the exam window has closed — see the minting guard below.
       displayToken: string | null;
       displayTokenExpiresAt: string | null;
@@ -59,9 +67,11 @@ export async function getExamPass(examId: string): Promise<ExamPassResult> {
 
   const { data: org } = await service
     .from("organizations")
-    .select("timezone")
+    .select("timezone, type")
     .eq("id", student.organizationId)
     .maybeSingle();
+  const timeZone = safeTimeZone(org?.timezone);
+  const isSchool = org?.type === "SCHOOL";
 
   const now = new Date();
   const state = computeRevealState(
@@ -70,7 +80,7 @@ export async function getExamPass(examId: string): Promise<ExamPassResult> {
     exam.start_time,
     exam.end_time,
     exam.reveal_threshold_minutes,
-    safeTimeZone(org?.timezone),
+    timeZone,
   );
 
   const { data: studentRow } = await service
@@ -94,9 +104,15 @@ export async function getExamPass(examId: string): Promise<ExamPassResult> {
   let token: string | null = null;
   let expiresAt: Date | null = null;
   if (!state.completed) {
-    const signed = await signRotatingDisplayToken({ mappingId: mapping.id, examId });
-    token = signed.token;
-    expiresAt = signed.expiresAt;
+    if (isSchool) {
+      const examEnd = zonedDateTimeToUtc(exam.exam_date, exam.end_time, timeZone);
+      expiresAt = new Date(examEnd.getTime() + 6 * 60 * 60 * 1000);
+      token = await signStaticDisplayToken({ mappingId: mapping.id, examId, expiresAt });
+    } else {
+      const signed = await signRotatingDisplayToken({ mappingId: mapping.id, examId });
+      token = signed.token;
+      expiresAt = signed.expiresAt;
+    }
   }
 
   return {
@@ -121,6 +137,9 @@ export async function getExamPass(examId: string): Promise<ExamPassResult> {
           }
         : null,
     photoUrl,
+    studentFullName: student.fullName,
+    studentRollNumber: student.rollNumber,
+    isStaticPass: isSchool,
     displayToken: token,
     displayTokenExpiresAt: expiresAt?.toISOString() ?? null,
   };

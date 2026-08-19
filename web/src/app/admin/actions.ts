@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { requestAccountPasswordReset, redeemAccountPasswordReset } from "@/lib/account-password-reset";
 
 export type AdminLoginState = { error?: string } | undefined;
 
@@ -45,4 +46,38 @@ export async function adminLogout() {
   const supabase = await createClient();
   await supabase.auth.signOut();
   redirect("/admin/login");
+}
+
+const RESET_REQUESTED_MESSAGE =
+  "If that email belongs to an admin account, we've emailed password reset instructions.";
+
+export type RequestAdminResetState = { message: string } | undefined;
+
+export async function requestAdminPasswordReset(
+  _prevState: RequestAdminResetState,
+  formData: FormData,
+): Promise<RequestAdminResetState> {
+  const email = String(formData.get("email") ?? "");
+  await requestAccountPasswordReset("ADMIN", email);
+  return { message: RESET_REQUESTED_MESSAGE };
+}
+
+export type RedeemAdminResetState = { error: string } | undefined;
+
+export async function redeemAdminPasswordReset(
+  _prevState: RedeemAdminResetState,
+  formData: FormData,
+): Promise<RedeemAdminResetState> {
+  const token = String(formData.get("token") ?? "");
+  const newPassword = String(formData.get("newPassword") ?? "");
+  const confirmPassword = String(formData.get("confirmPassword") ?? "");
+
+  if (newPassword !== confirmPassword) {
+    return { error: "Passwords don't match." };
+  }
+
+  const result = await redeemAccountPasswordReset(token, newPassword);
+  if (result.error) return { error: result.error };
+
+  redirect("/admin/login?reset=success");
 }

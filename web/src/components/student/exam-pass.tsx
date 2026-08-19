@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getExamPass, type ExamPassResult } from "@/app/student/(protected)/exams/[examId]/actions";
 import { Logo } from "@/components/logo";
 import { SeatMap } from "@/components/student/seat-map";
-import { CalendarCheck, CheckCircle2, Lock, MapPin, ScanLine } from "lucide-react";
+import { CalendarCheck, CheckCircle2, Lock, MapPin, Printer, ScanLine } from "lucide-react";
 
 const POLL_INTERVAL_MS = 60_000;
 // Once reveal is due within this window, schedule a precise one-off check
@@ -196,16 +197,38 @@ export function ExamPass({ examId, initial }: { examId: string; initial: ExamPas
 
         {pass.displayToken ? (
           <div className="flex flex-col items-center gap-3 px-6 py-6">
-            <div className="relative flex size-[232px] items-center justify-center">
-              <TokenRing progress={tokenProgress} />
-              <div className="rounded-xl bg-white p-3 shadow-sm">
-                <QRCodeSVG value={pass.displayToken} size={176} />
+            {pass.isStaticPass ? (
+              <div className="rounded-xl bg-white p-3 shadow-sm ring-1 ring-border">
+                <QRCodeSVG value={pass.displayToken} size={200} />
               </div>
-            </div>
-            <p className="text-center text-xs text-slate">
-              This code refreshes automatically — a screenshot will stop scanning once it expires. Show the live
-              screen at the door.
-            </p>
+            ) : (
+              <div className="relative flex size-[232px] items-center justify-center">
+                <TokenRing progress={tokenProgress} />
+                <div className="rounded-xl bg-white p-3 shadow-sm">
+                  <QRCodeSVG value={pass.displayToken} size={176} />
+                </div>
+              </div>
+            )}
+            {pass.isStaticPass ? (
+              <>
+                <p className="text-center text-xs text-slate">
+                  This code stays valid through the exam — print it and bring the printed copy to the hall.
+                </p>
+                <Link
+                  href={`/student/exams/${examId}/print`}
+                  target="_blank"
+                  className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+                >
+                  <Printer className="size-4" strokeWidth={2} />
+                  Print pass
+                </Link>
+              </>
+            ) : (
+              <p className="text-center text-xs text-slate">
+                This code refreshes automatically — a screenshot will stop scanning once it expires. Show the live
+                screen at the door.
+              </p>
+            )}
           </div>
         ) : (
           <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">

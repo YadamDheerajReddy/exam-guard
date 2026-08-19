@@ -17,7 +17,7 @@ import { LinearGradient } from "expo-linear-gradient";
 // the browser preview).
 import Animated, { Easing, FadeInDown, FadeInUp } from "react-native-reanimated";
 import { supabase } from "@/lib/supabase";
-import { checkLoginPassword, requestInvigilatorPasswordReset } from "@/lib/api";
+import { checkLoginPassword } from "@/lib/api";
 import { setPendingLoginCheck } from "@/lib/pending-login-check";
 import { Logo } from "@/components/logo";
 import { ScanVisual } from "@/components/auth/scan-visual";
@@ -28,11 +28,6 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [resetEmail, setResetEmail] = useState("");
-  const [resetSubmitting, setResetSubmitting] = useState(false);
-  const [resetMessage, setResetMessage] = useState<string | null>(null);
-  const [resetError, setResetError] = useState<string | null>(null);
 
   async function handleSignIn() {
     if (!email || !password) {
@@ -61,20 +56,6 @@ export default function LoginScreen() {
     setPendingLoginCheck(checkLoginPassword(password).catch(() => ({ mustChangePassword: false })));
     // On success, onAuthStateChange updates the session and Stack.Protected
     // switches to the (app) group automatically.
-  }
-
-  async function handleRequestReset() {
-    if (!resetEmail.trim()) return;
-    setResetSubmitting(true);
-    setResetError(null);
-    try {
-      const result = await requestInvigilatorPasswordReset(resetEmail.trim());
-      setResetMessage(result.message);
-    } catch (err) {
-      setResetError(err instanceof Error ? err.message : "Something went wrong.");
-    } finally {
-      setResetSubmitting(false);
-    }
   }
 
   return (
@@ -152,53 +133,9 @@ export default function LoginScreen() {
             <Text style={styles.buttonText}>{submitting ? "Signing in…" : "Sign in"}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.forgotLink}
-            onPress={() => setShowForgotPassword((v) => !v)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.forgotLinkText}>Forgot password?</Text>
-          </TouchableOpacity>
-
-          {showForgotPassword && (
-            <Animated.View entering={FadeInDown.duration(200)} style={styles.forgotPanel}>
-              {resetMessage ? (
-                <Text style={styles.forgotMessage}>{resetMessage}</Text>
-              ) : (
-                <>
-                  <Text style={styles.forgotHint}>
-                    Enter your institutional email — we&apos;ll send a reset link if there&apos;s a matching
-                    account. The link opens in your browser to finish.
-                  </Text>
-                  <TextInput
-                    value={resetEmail}
-                    onChangeText={setResetEmail}
-                    autoCapitalize="none"
-                    autoComplete="email"
-                    keyboardType="email-address"
-                    style={styles.input}
-                    placeholder="you@institution.edu"
-                    placeholderTextColor={Colors.slate}
-                  />
-                  {resetError && (
-                    <View style={styles.errorBox}>
-                      <Text style={styles.errorText}>{resetError}</Text>
-                    </View>
-                  )}
-                  <TouchableOpacity
-                    style={[styles.secondaryButton, resetSubmitting && styles.buttonDisabled]}
-                    onPress={handleRequestReset}
-                    disabled={resetSubmitting}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.secondaryButtonText}>
-                      {resetSubmitting ? "Sending…" : "Send reset link"}
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </Animated.View>
-          )}
+          {/* No self-service reset for invigilators — an admin resets it
+           * for you from the Invigilators page. */}
+          <Text style={styles.contactAdminText}>Contact your organization admin for a password change.</Text>
         </Animated.View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -310,43 +247,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
   },
-  forgotLink: {
+  contactAdminText: {
     marginTop: 16,
-    alignItems: "center",
-  },
-  forgotLinkText: {
-    color: Colors.accent,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  forgotPanel: {
-    marginTop: 12,
-    padding: 14,
-    borderRadius: Radius,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    gap: 10,
-  },
-  forgotHint: {
+    textAlign: "center",
     fontSize: 13,
-    lineHeight: 18,
     color: Colors.slate,
-  },
-  forgotMessage: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: Colors.verified,
-  },
-  secondaryButton: {
-    backgroundColor: Colors.accent,
-    borderRadius: Radius,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  secondaryButtonText: {
-    color: Colors.white,
-    fontSize: 14,
-    fontWeight: "600",
   },
 });

@@ -11,27 +11,30 @@ import { accountPasswordResetEmail } from "@/lib/email-templates";
 import { sendMail } from "@/lib/mailer";
 import { absoluteUrl } from "@/lib/site-url";
 
-export type AccountType = "ADMIN" | "INVIGILATOR";
-
-// Shared by the admin and invigilator "forgot password" flows — same
-// hashed-single-use-token mechanics as the student flow (lib/password-reset
-// .ts), just pointed at whichever profile table the caller names. Always
-// resolves without distinguishing "no such account" / "rate limited" /
-// "mail failed" from a real send, so nothing here can be used to probe
-// which emails have accounts.
-export async function requestAccountPasswordReset(accountType: AccountType, email: string): Promise<void> {
+// Org admin self-service reset — same hashed-single-use-token mechanics as
+// the student flow (lib/password-reset.ts). Invigilators have no
+// self-service path; an admin resets their password directly instead (see
+// admin/(protected)/(org)/invigilators/actions.ts), so this table only
+// ever holds ADMIN rows despite account_type still allowing for one.
+//
+// Always resolves without distinguishing "no such account" / "rate
+// limited" / "mail failed" from a real send, so nothing here can be used
+// to probe which emails have accounts.
+export async function requestAdminPasswordReset(email: string): Promise<void> {
   const trimmed = email.trim().toLowerCase();
   if (!trimmed) return;
 
   const service = createAdminClient();
-  const table = accountType === "ADMIN" ? "admins" : "invigilators";
 
-  let query = service.from(table).select("id, full_name, email").eq("email", trimmed);
   // Super admins are platform staff, not an institution's account to
   // self-serve reset — excluded at the lookup itself so no token can ever
   // be minted for one, regardless of what's submitted here.
-  if (accountType === "ADMIN") query = query.neq("role", "SUPER_ADMIN");
-  const { data: account } = await query.maybeSingle();
+  const { data: account } = await service
+    .from("admins")
+    .select("id, full_name, email")
+    .eq("email", trimmed)
+    .neq("role", "SUPER_ADMIN")
+    .maybeSingle();
   if (!account) return;
 
   const windowStart = new Date(Date.now() - RESET_REQUEST_WINDOW_MS).toISOString();
@@ -53,7 +56,7 @@ export async function requestAccountPasswordReset(accountType: AccountType, emai
   const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
 
   const { error: insertError } = await service.from("account_password_reset_tokens").insert({
-    account_type: accountType,
+    account_type: "ADMIN",
     account_id: account.id,
     account_email: account.email,
     token_hash: tokenHash,
@@ -61,21 +64,17 @@ export async function requestAccountPasswordReset(accountType: AccountType, emai
   });
   if (insertError) return;
 
-  const resetPath = accountType === "ADMIN" ? "/admin/reset-password" : "/invigilator/reset-password";
-  const resetUrl = await absoluteUrl(`${resetPath}?token=${rawToken}`);
+  const resetUrl = await absoluteUrl(`/admin/reset-password?token=${rawToken}`);
   const { subject, html } = accountPasswordResetEmail({
     fullName: account.full_name,
     resetUrl,
     expiresInMinutes: Math.round(RESET_TOKEN_TTL_MS / 60_000),
-    roleLabel: accountType === "ADMIN" ? "ExamGuard admin" : "ExamGuard invigilator",
+    roleLabel: "ExamGuard admin",
   });
   await sendMail({ to: account.email, subject, html });
 }
 
-export async function redeemAccountPasswordReset(
-  token: string,
-  newPassword: string,
-): Promise<{ error?: string }> {
+export async function redeemAdminPasswordReset(token: string, newPassword: string): Promise<{ error?: string }> {
   if (!token) return { error: "This reset link is invalid or has expired. Request a new one." };
   if (newPassword.length < 8) return { error: "Password must be at least 8 characters." };
 
@@ -88,7 +87,7 @@ export async function redeemAccountPasswordReset(
     .eq("token_hash", tokenHash)
     .is("used_at", null)
     .gt("expires_at", new Date().toISOString())
-    .select("account_id, account_type")
+    .select("account_id")
     .maybeSingle();
 
   if (consumeError || !consumed) {
@@ -100,8 +99,7 @@ export async function redeemAccountPasswordReset(
   });
   if (updateError) return { error: updateError.message };
 
-  const table = consumed.account_type === "ADMIN" ? "admins" : "invigilators";
-  await service.from(table).update({ must_change_password: false }).eq("id", consumed.account_id);
+  await service.from("admins").update({ must_change_password: false }).eq("id", consumed.account_id);
 
   return {};
 }

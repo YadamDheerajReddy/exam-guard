@@ -113,6 +113,53 @@ export async function createInvigilator(
   return { success: true, email, tempPassword: created.tempPassword };
 }
 
+export type ResetInvigilatorPasswordResult =
+  | { ok: true; tempPassword: string }
+  | { ok: false; error: string };
+
+// Mirrors resetStudentPassword: invigilators have no self-service reset
+// (see mobile login screen — "contact your admin" is the whole flow), so
+// this is the only way one gets back in after a forgotten password.
+// Regenerates the same deterministic temp password used at creation
+// ({organizationName}@#{organizationSlug}) and forces a change on next
+// login, same as a freshly-created account.
+export async function resetInvigilatorPassword(invigilatorId: string): Promise<ResetInvigilatorPasswordResult> {
+  const admin = await requireOrgAdmin();
+  const service = createAdminClient();
+
+  const { data: invigilator } = await service
+    .from("invigilators")
+    .select("id")
+    .eq("id", invigilatorId)
+    .eq("organization_id", admin.organizationId)
+    .maybeSingle();
+  if (!invigilator) {
+    return { ok: false, error: "Invigilator not found." };
+  }
+
+  const { data: org } = await service
+    .from("organizations")
+    .select("name, slug")
+    .eq("id", admin.organizationId)
+    .maybeSingle();
+  if (!org?.slug) {
+    return { ok: false, error: "Set your organization's Organization ID first (Change Password page)." };
+  }
+
+  const tempPassword = invigilatorTempPassword(org.name, org.slug);
+  const { error: authError } = await service.auth.admin.updateUserById(invigilatorId, {
+    password: tempPassword,
+  });
+  if (authError) {
+    return { ok: false, error: authError.message };
+  }
+
+  await service.from("invigilators").update({ must_change_password: true }).eq("id", invigilatorId);
+
+  revalidatePath("/admin/invigilators");
+  return { ok: true, tempPassword };
+}
+
 export async function setInvigilatorActive(
   invigilatorId: string,
   isActive: boolean,

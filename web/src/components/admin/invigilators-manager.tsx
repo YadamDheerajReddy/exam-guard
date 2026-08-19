@@ -4,10 +4,11 @@ import { useActionState, useEffect, useRef, useState, useTransition } from "reac
 import {
   createInvigilator,
   reassignInvigilatorHall,
+  resetInvigilatorPassword,
   setInvigilatorActive,
 } from "@/app/admin/(protected)/(org)/invigilators/actions";
 import { MAX_INVIGILATORS_PER_HALL } from "@/lib/hall-capacity";
-import { AlertCircle, CheckCircle2, ShieldCheck, ShieldOff, ShieldX } from "lucide-react";
+import { AlertCircle, CheckCircle2, KeyRound, ShieldCheck, ShieldOff, ShieldX } from "lucide-react";
 
 type Hall = { id: string; buildingName: string; roomNumber: string; activeCount: number };
 type Invigilator = {
@@ -115,6 +116,7 @@ export function InvigilatorsManager({
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Assigned hall</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Credentials</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
@@ -139,6 +141,9 @@ function InvigilatorRow({
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [resetState, setResetState] = useState<
+    { status: "pending" } | { status: "done"; tempPassword: string } | { status: "error"; error: string } | null
+  >(null);
 
   function handleHallChange(hallId: string) {
     setError(null);
@@ -153,6 +158,16 @@ function InvigilatorRow({
     startTransition(async () => {
       const result = await setInvigilatorActive(invigilator.id, !invigilator.isActive);
       if (result.error) setError(result.error);
+    });
+  }
+
+  function handleResetPassword() {
+    setResetState({ status: "pending" });
+    startTransition(async () => {
+      const result = await resetInvigilatorPassword(invigilator.id);
+      setResetState(
+        result.ok ? { status: "done", tempPassword: result.tempPassword } : { status: "error", error: result.error },
+      );
     });
   }
 
@@ -196,6 +211,22 @@ function InvigilatorRow({
           )}
           {invigilator.isActive ? "Active" : "Inactive"}
         </span>
+      </td>
+      <td className="px-4 py-3">
+        {resetState?.status === "done" ? (
+          <span className="font-mono text-verified">New password: {resetState.tempPassword}</span>
+        ) : resetState?.status === "error" ? (
+          <span className="text-alert">{resetState.error}</span>
+        ) : (
+          <button
+            onClick={handleResetPassword}
+            disabled={resetState?.status === "pending"}
+            className="flex items-center gap-1.5 text-sm font-semibold text-accent transition-colors hover:text-accent-hover disabled:opacity-60"
+          >
+            <KeyRound className="size-3.5" strokeWidth={2} />
+            {resetState?.status === "pending" ? "Resetting…" : "Reset password"}
+          </button>
+        )}
       </td>
       <td className="px-4 py-3 text-right">
         {error && (

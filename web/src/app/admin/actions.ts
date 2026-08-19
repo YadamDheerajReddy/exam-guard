@@ -2,7 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { requestAccountPasswordReset, redeemAccountPasswordReset } from "@/lib/account-password-reset";
+import {
+  requestAdminPasswordReset as requestAdminPasswordResetToken,
+  redeemAdminPasswordReset as redeemAdminPasswordResetToken,
+} from "@/lib/account-password-reset";
 
 export type AdminLoginState = { error?: string } | undefined;
 
@@ -58,7 +61,7 @@ export async function requestAdminPasswordReset(
   formData: FormData,
 ): Promise<RequestAdminResetState> {
   const email = String(formData.get("email") ?? "");
-  await requestAccountPasswordReset("ADMIN", email);
+  await requestAdminPasswordResetToken(email);
   return { message: RESET_REQUESTED_MESSAGE };
 }
 
@@ -76,7 +79,7 @@ export async function redeemAdminPasswordReset(
     return { error: "Passwords don't match." };
   }
 
-  const result = await redeemAccountPasswordReset(token, newPassword);
+  const result = await redeemAdminPasswordResetToken(token, newPassword);
   if (result.error) return { error: result.error };
 
   redirect("/admin/login?reset=success");

@@ -1,65 +1,66 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { ExamForm } from "@/components/admin/exam-form";
+import { ExamsManager } from "@/components/admin/exams-manager";
+import { requireOrgAdmin } from "@/lib/admin-context";
+import { safeTimeZone } from "@/lib/timezone";
+import { examStatus } from "@/lib/reveal";
 
 export default async function ExamsPage() {
+  const admin = await requireOrgAdmin();
   const supabase = await createClient();
-  const { data: exams } = await supabase
-    .from("exams")
-    .select("id, course_code, course_title, exam_date, start_time, end_time, reveal_threshold_minutes")
-    .order("exam_date", { ascending: true });
+  const [{ data: exams }, { data: org }] = await Promise.all([
+    supabase
+      .from("exams")
+      .select("id, course_code, course_title, exam_date, start_time, end_time, reveal_threshold_minutes")
+      .order("exam_date", { ascending: true }),
+    supabase.from("organizations").select("timezone").eq("id", admin.organizationId).maybeSingle(),
+  ]);
+
+  const timeZone = safeTimeZone(org?.timezone);
+  const now = new Date();
+
+  const examIds = (exams ?? []).map((e) => e.id);
+  const { data: mappingRows } = examIds.length
+    ? await supabase.from("student_exam_mappings").select("exam_id").in("exam_id", examIds)
+    : { data: [] };
+
+  const mappedByExam = new Map<string, number>();
+  for (const row of mappingRows ?? []) {
+    mappedByExam.set(row.exam_id, (mappedByExam.get(row.exam_id) ?? 0) + 1);
+  }
 
   return (
     <div className="mx-auto max-w-4xl">
       <h1 className="text-xl font-bold text-ink">Exams</h1>
       <p className="mt-1 text-sm text-slate">Course, date, time, and reveal timing.</p>
 
-      <div className="mt-6 rounded-lg border border-border bg-white p-5">
+      <div className="mt-6 rounded-xl border border-border bg-white p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-charcoal">Create an exam</h2>
-        <ExamForm />
+        <ExamForm timeZone={timeZone} />
       </div>
 
-      <div className="mt-6 overflow-x-auto overflow-hidden rounded-lg border border-border bg-white">
-        {!exams || exams.length === 0 ? (
-          <p className="p-6 text-center text-sm text-slate">No exams yet.</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface text-left text-xs font-semibold uppercase tracking-wide text-slate">
-                <th className="px-4 py-3">Course</th>
-                <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3">Time</th>
-                <th className="px-4 py-3">Reveal</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {exams.map((exam) => (
-                <tr key={exam.id} className="border-b border-border last:border-0">
-                  <td className="px-4 py-3">
-                    <p className="font-semibold text-ink">{exam.course_code}</p>
-                    <p className="text-xs text-slate">{exam.course_title}</p>
-                  </td>
-                  <td className="px-4 py-3 text-charcoal">{exam.exam_date}</td>
-                  <td className="px-4 py-3 font-mono text-charcoal">
-                    {exam.start_time}–{exam.end_time}
-                  </td>
-                  <td className="px-4 py-3 text-charcoal">
-                    T-{exam.reveal_threshold_minutes}m
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Link
-                      href={`/admin/exams/${exam.id}/mapping`}
-                      className="text-sm font-semibold text-accent hover:text-accent-hover"
-                    >
-                      Map students
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+      <div className="mt-6">
+        <ExamsManager
+          timeZone={timeZone}
+          exams={(exams ?? []).map((exam) => ({
+            id: exam.id,
+            courseCode: exam.course_code,
+            courseTitle: exam.course_title,
+            examDate: exam.exam_date,
+            startTime: exam.start_time,
+            endTime: exam.end_time,
+            revealThresholdMinutes: exam.reveal_threshold_minutes,
+            mapped: mappedByExam.get(exam.id) ?? 0,
+            status: examStatus(
+              now,
+              exam.exam_date,
+              exam.start_time,
+              exam.end_time,
+              exam.reveal_threshold_minutes,
+              timeZone,
+            ),
+          }))}
+        />
       </div>
     </div>
   );

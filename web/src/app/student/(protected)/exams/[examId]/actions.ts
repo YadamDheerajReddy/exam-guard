@@ -3,6 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireStudent } from "@/lib/student-context";
 import { computeRevealState } from "@/lib/reveal";
+import { safeTimeZone } from "@/lib/timezone";
 import { signRotatingDisplayToken } from "@/lib/barcode-token";
 
 export type ExamPassResult =
@@ -13,14 +14,17 @@ export type ExamPassResult =
       courseTitle: string;
       examDate: string;
       startTime: string;
+      endTime: string;
       revealAt: string;
       revealed: boolean;
+      completed: boolean;
       checkedIn: boolean;
       checkedInAt: string | null;
-      hall: { buildingName: string; roomNumber: string; seatNumber: string } | null;
+      hall: { buildingName: string; roomNumber: string; seatNumber: string; capacity: number } | null;
       photoUrl: string | null;
-      displayToken: string;
-      displayTokenExpiresAt: string;
+      // Null once the exam window has closed — see the minting guard below.
+      displayToken: string | null;
+      displayTokenExpiresAt: string | null;
     };
 
 // Every field the student client sees comes from this one server action —
@@ -37,7 +41,7 @@ export async function getExamPass(examId: string): Promise<ExamPassResult> {
   const { data: mapping } = await service
     .from("student_exam_mappings")
     .select(
-      "id, seat_number, used_at, exams(course_code, course_title, exam_date, start_time, end_time, reveal_threshold_minutes), halls(building_name, room_number)",
+      "id, seat_number, used_at, exams(course_code, course_title, exam_date, start_time, end_time, reveal_threshold_minutes), halls(building_name, room_number, capacity)",
     )
     .eq("student_id", student.id)
     .eq("exam_id", examId)
@@ -53,6 +57,12 @@ export async function getExamPass(examId: string): Promise<ExamPassResult> {
   }
   const hall = Array.isArray(mapping.halls) ? mapping.halls[0] : mapping.halls;
 
+  const { data: org } = await service
+    .from("organizations")
+    .select("timezone")
+    .eq("id", student.organizationId)
+    .maybeSingle();
+
   const now = new Date();
   const state = computeRevealState(
     now,
@@ -60,6 +70,7 @@ export async function getExamPass(examId: string): Promise<ExamPassResult> {
     exam.start_time,
     exam.end_time,
     exam.reveal_threshold_minutes,
+    safeTimeZone(org?.timezone),
   );
 
   const { data: studentRow } = await service
@@ -76,10 +87,17 @@ export async function getExamPass(examId: string): Promise<ExamPassResult> {
     photoUrl = signed?.signedUrl ?? null;
   }
 
-  const { token, expiresAt } = await signRotatingDisplayToken({
-    mappingId: mapping.id,
-    examId,
-  });
+  // Once the exam window closes the pass is spent, so stop minting display
+  // tokens entirely rather than just hiding the QR client-side — otherwise
+  // a still-valid token sits in the network response of any stale tab and
+  // could be re-rendered into a scannable code.
+  let token: string | null = null;
+  let expiresAt: Date | null = null;
+  if (!state.completed) {
+    const signed = await signRotatingDisplayToken({ mappingId: mapping.id, examId });
+    token = signed.token;
+    expiresAt = signed.expiresAt;
+  }
 
   return {
     ok: true,
@@ -87,8 +105,10 @@ export async function getExamPass(examId: string): Promise<ExamPassResult> {
     courseTitle: exam.course_title,
     examDate: exam.exam_date,
     startTime: exam.start_time,
+    endTime: exam.end_time,
     revealAt: state.revealAt.toISOString(),
     revealed: state.revealed,
+    completed: state.completed,
     checkedIn: mapping.used_at !== null,
     checkedInAt: mapping.used_at,
     hall:
@@ -97,10 +117,11 @@ export async function getExamPass(examId: string): Promise<ExamPassResult> {
             buildingName: hall.building_name,
             roomNumber: hall.room_number,
             seatNumber: mapping.seat_number,
+            capacity: hall.capacity,
           }
         : null,
     photoUrl,
     displayToken: token,
-    displayTokenExpiresAt: expiresAt.toISOString(),
+    displayTokenExpiresAt: expiresAt?.toISOString() ?? null,
   };
 }

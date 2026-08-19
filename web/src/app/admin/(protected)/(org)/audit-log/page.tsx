@@ -31,7 +31,7 @@ export default async function AuditLogPage({
   let query = supabase
     .from("verification_logs")
     .select(
-      "id, verified_at, status, notes, invigilator_id, invigilators(full_name), mapping_id, student_exam_mappings(seat_number, exam_id, hall_id, exams(course_code), halls(building_name, room_number), students(roll_number, full_name))",
+      "id, verified_at, status, notes, invigilator_id, corrects_log_id, corrected_by, invigilators(full_name), admins(full_name), mapping_id, student_exam_mappings(seat_number, exam_id, hall_id, exams(course_code), halls(building_name, room_number), students(roll_number, full_name))",
     )
     .order("verified_at", { ascending: false })
     .limit(ROW_LIMIT);
@@ -57,12 +57,16 @@ export default async function AuditLogPage({
       const hall = mapping ? (Array.isArray(mapping.halls) ? mapping.halls[0] : mapping.halls) : null;
       const student = mapping ? (Array.isArray(mapping.students) ? mapping.students[0] : mapping.students) : null;
       const invigilator = Array.isArray(log.invigilators) ? log.invigilators[0] : log.invigilators;
+      const correctingAdmin = Array.isArray(log.admins) ? log.admins[0] : log.admins;
 
       return {
         id: log.id,
         verifiedAt: log.verified_at,
         status: log.status,
         notes: log.notes,
+        correctsLogId: log.corrects_log_id,
+        correctedByName: correctingAdmin?.full_name ?? null,
+        supersededBy: null as string | null,
         invigilatorName: invigilator?.full_name ?? "Unknown",
         invigilatorId: log.invigilator_id,
         examId: mapping?.exam_id ?? null,
@@ -75,6 +79,16 @@ export default async function AuditLogPage({
       };
     },
   );
+
+  // Mark the originals that a correction supersedes, so the table can show
+  // both sides of the pair rather than two contradictory-looking rows.
+  const correctedIds = new Map<string, string>();
+  for (const row of rows) {
+    if (row.correctsLogId) correctedIds.set(row.correctsLogId, row.id);
+  }
+  for (const row of rows) {
+    row.supersededBy = correctedIds.get(row.id) ?? null;
+  }
 
   const filtered = rows
     .filter((r) => (params.examId ? r.examId === params.examId : true))

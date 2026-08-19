@@ -33,6 +33,39 @@ function credentialBlock(rows: { label: string; value: string }[]) {
   `;
 }
 
+export function studentPasswordResetEmail({
+  fullName,
+  resetUrl,
+  expiresInMinutes,
+}: {
+  fullName: string;
+  resetUrl: string;
+  expiresInMinutes: number;
+}) {
+  return {
+    subject: "Reset your ExamGuard student password",
+    html: shell(
+      "Reset your password",
+      `
+        <p style="font-size: 14px; line-height: 1.6;">Hi ${fullName},</p>
+        <p style="font-size: 14px; line-height: 1.6;">
+          We received a request to reset your ExamGuard student password. Click below to choose a new one —
+          this link works once and expires in ${expiresInMinutes} minutes.
+        </p>
+        <p style="margin: 24px 0;">
+          <a href="${resetUrl}" style="display: inline-block; background: #1a3c6e; color: #ffffff; font-weight: 600; font-size: 14px; padding: 10px 20px; border-radius: 8px; text-decoration: none;">
+            Choose a new password →
+          </a>
+        </p>
+        <p style="font-size: 13px; line-height: 1.6; color: #6b7280;">
+          If you didn't request this, you can safely ignore this email — your password won't change unless you
+          open this link and set a new one.
+        </p>
+      `,
+    ),
+  };
+}
+
 export function orgAdminCreatedEmail({
   orgName,
   fullName,

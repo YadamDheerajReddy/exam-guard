@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { resetStudentPassword } from "@/app/admin/(protected)/(org)/students/actions";
 import { uploadStudentPhoto } from "@/app/admin/(protected)/(org)/roster/actions";
-import { CheckCircle2, KeyRound, Search, XCircle } from "lucide-react";
+import { CheckCircle2, ImageOff, KeyRound, Search, XCircle } from "lucide-react";
 
 type Student = {
   id: string;
@@ -14,6 +14,11 @@ type Student = {
   department: string;
   isActive: boolean;
   photoUrl: string | null;
+  // Whether a photo path is stored at all, kept separate from photoUrl
+  // (the resolved signed URL). Counting on the stored path keeps this
+  // number identical to the dashboard's warning banner, which can't afford
+  // to sign a URL per student just to produce a count.
+  hasPhoto: boolean;
 };
 
 type PhotoState = { status: "uploading" } | { status: "error"; error: string };
@@ -22,10 +27,17 @@ type ResetState =
   | { status: "done"; tempPassword: string }
   | { status: "error"; error: string };
 
-export function StudentsTable({ students }: { students: Student[] }) {
+export function StudentsTable({
+  students,
+  initialMissingPhotoOnly = false,
+}: {
+  students: Student[];
+  initialMissingPhotoOnly?: boolean;
+}) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [department, setDepartment] = useState("all");
+  const [missingPhotoOnly, setMissingPhotoOnly] = useState(initialMissingPhotoOnly);
   const [photoOverrides, setPhotoOverrides] = useState<Map<string, string>>(new Map());
   const [photoStates, setPhotoStates] = useState<Map<string, PhotoState>>(new Map());
   const [resetStates, setResetStates] = useState<Map<string, ResetState>>(new Map());
@@ -40,12 +52,15 @@ export function StudentsTable({ students }: { students: Student[] }) {
     const q = query.trim().toLowerCase();
     return students.filter((s) => {
       if (department !== "all" && s.department !== department) return false;
+      if (missingPhotoOnly && s.hasPhoto) return false;
       if (!q) return true;
       return (
         s.rollNumber.toLowerCase().includes(q) || s.fullName.toLowerCase().includes(q)
       );
     });
-  }, [students, query, department]);
+  }, [students, query, department, missingPhotoOnly]);
+
+  const missingPhotoCount = useMemo(() => students.filter((s) => !s.hasPhoto).length, [students]);
 
   function handlePhotoSelect(studentId: string, file: File) {
     setPhotoStates((prev) => new Map(prev).set(studentId, { status: "uploading" }));
@@ -107,6 +122,19 @@ export function StudentsTable({ students }: { students: Student[] }) {
             </option>
           ))}
         </select>
+        <button
+          type="button"
+          onClick={() => setMissingPhotoOnly((v) => !v)}
+          disabled={missingPhotoCount === 0}
+          className={`flex shrink-0 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-50 ${
+            missingPhotoOnly
+              ? "border-pending bg-pending-tint text-pending"
+              : "border-border text-charcoal hover:bg-surface"
+          }`}
+        >
+          <ImageOff className="size-4" strokeWidth={2} />
+          No photo ({missingPhotoCount})
+        </button>
       </div>
 
       <div className="overflow-x-auto overflow-hidden rounded-lg border border-border bg-white">
@@ -142,7 +170,12 @@ export function StudentsTable({ students }: { students: Student[] }) {
                           // eslint-disable-next-line @next/next/no-img-element -- signed Supabase Storage URL, not worth next/image remotePatterns config for an admin thumbnail
                           <img src={photoUrl} alt="" className="h-8 w-8 rounded object-cover" />
                         ) : (
-                          <div className="h-8 w-8 rounded bg-surface" />
+                          <div
+                            title="No photo on file"
+                            className="flex h-8 w-8 items-center justify-center rounded bg-pending-tint"
+                          >
+                            <ImageOff className="size-4 text-pending" strokeWidth={2} />
+                          </div>
                         )}
                         <label
                           htmlFor={inputId}

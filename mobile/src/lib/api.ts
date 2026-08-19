@@ -2,11 +2,56 @@ import { supabase } from "./supabase";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL!;
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+
+  // Lets screens tell "your session died, sign in again" apart from a real
+  // server-side problem, instead of showing one dead-end message for both.
+  get isAuthError() {
+    return this.status === 401;
+  }
+}
+
 async function authHeader(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
-  if (!token) throw new Error("Not signed in.");
+  if (!token) throw new ApiError("You're signed out. Sign in again to continue.", 401);
   return { Authorization: `Bearer ${token}` };
+}
+
+// One request path for every /api/invigilator/* call so failures carry the
+// server's own message and status. Previously each helper threw a fixed
+// string ("Couldn't load exams.") that discarded both, which made a failure
+// on a real device impossible to diagnose from the screen.
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = await authHeader();
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers: { ...headers, ...(init?.headers ?? {}) },
+    });
+  } catch {
+    // fetch only rejects on transport failure — the server was never reached.
+    throw new ApiError(`Can't reach the server at ${API_BASE_URL}. Check the connection.`, 0);
+  }
+
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    if (res.status === 401) {
+      throw new ApiError(body?.error ?? "Your session expired. Sign out and sign in again.", 401);
+    }
+    throw new ApiError(body?.error ?? `Request failed (${res.status}).`, res.status);
+  }
+
+  return res.json() as Promise<T>;
 }
 
 export type ExamSummary = {
@@ -19,10 +64,7 @@ export type ExamSummary = {
 };
 
 export async function fetchExams(): Promise<ExamSummary[]> {
-  const headers = await authHeader();
-  const res = await fetch(`${API_BASE_URL}/api/invigilator/exams`, { headers });
-  if (!res.ok) throw new Error("Couldn't load exams.");
-  const data = await res.json();
+  const data = await request<{ exams: ExamSummary[] }>("/api/invigilator/exams");
   return data.exams;
 }
 
@@ -42,13 +84,7 @@ export type RosterEntry = {
 export async function fetchRoster(
   examId: string,
 ): Promise<{ exam: ExamSummary; myHallId: string; roster: RosterEntry[] }> {
-  const headers = await authHeader();
-  const res = await fetch(`${API_BASE_URL}/api/invigilator/roster?examId=${encodeURIComponent(examId)}`, { headers });
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(body?.error ?? "Couldn't load roster.");
-  }
-  return res.json();
+  return request(`/api/invigilator/roster?examId=${encodeURIComponent(examId)}`);
 }
 
 export type SyncEvent = {
@@ -65,14 +101,11 @@ export type SyncAck = {
 };
 
 export async function syncEvents(events: SyncEvent[]): Promise<SyncAck[]> {
-  const headers = await authHeader();
-  const res = await fetch(`${API_BASE_URL}/api/invigilator/sync`, {
+  const data = await request<{ acks: SyncAck[] }>("/api/invigilator/sync", {
     method: "POST",
-    headers: { ...headers, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ events }),
   });
-  if (!res.ok) throw new Error("Sync failed.");
-  const data = await res.json();
   return data.acks;
 }
 
@@ -81,25 +114,17 @@ export async function syncEvents(events: SyncEvent[]): Promise<SyncAck[]> {
 // typed still matches the org's deterministic temp pattern, regardless of
 // whether this is the first login (see the route's own comment for why).
 export async function checkLoginPassword(password: string): Promise<{ mustChangePassword: boolean }> {
-  const headers = await authHeader();
-  const res = await fetch(`${API_BASE_URL}/api/invigilator/login-check`, {
+  return request("/api/invigilator/login-check", {
     method: "POST",
-    headers: { ...headers, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ password }),
   });
-  if (!res.ok) throw new Error("Couldn't verify login.");
-  return res.json();
 }
 
 export async function changeInvigilatorPassword(newPassword: string): Promise<void> {
-  const headers = await authHeader();
-  const res = await fetch(`${API_BASE_URL}/api/invigilator/change-password`, {
+  await request("/api/invigilator/change-password", {
     method: "POST",
-    headers: { ...headers, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ newPassword }),
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(body?.error ?? "Couldn't change password.");
-  }
 }

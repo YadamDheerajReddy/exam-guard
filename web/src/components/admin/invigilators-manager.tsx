@@ -6,9 +6,10 @@ import {
   reassignInvigilatorHall,
   setInvigilatorActive,
 } from "@/app/admin/(protected)/(org)/invigilators/actions";
+import { MAX_INVIGILATORS_PER_HALL } from "@/lib/hall-capacity";
 import { AlertCircle, CheckCircle2, ShieldCheck, ShieldOff, ShieldX } from "lucide-react";
 
-type Hall = { id: string; buildingName: string; roomNumber: string };
+type Hall = { id: string; buildingName: string; roomNumber: string; activeCount: number };
 type Invigilator = {
   id: string;
   fullName: string;
@@ -57,11 +58,15 @@ export function InvigilatorsManager({
             className="rounded-lg border border-border px-3 py-2 text-sm text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint"
           >
             <option value="">Unassigned hall</option>
-            {halls.map((h) => (
-              <option key={h.id} value={h.id}>
-                {h.buildingName} · {h.roomNumber}
-              </option>
-            ))}
+            {halls.map((h) => {
+              const full = h.activeCount >= MAX_INVIGILATORS_PER_HALL;
+              return (
+                <option key={h.id} value={h.id} disabled={full}>
+                  {h.buildingName} · {h.roomNumber} ({h.activeCount}/{MAX_INVIGILATORS_PER_HALL}
+                  {full ? " · full" : ""})
+                </option>
+              );
+            })}
           </select>
 
           {state && "error" in state && (
@@ -163,11 +168,21 @@ function InvigilatorRow({
           className="rounded-lg border border-border px-2 py-1 text-sm text-ink"
         >
           <option value="">Unassigned</option>
-          {halls.map((h) => (
-            <option key={h.id} value={h.id}>
-              {h.buildingName} · {h.roomNumber}
-            </option>
-          ))}
+          {halls.map((h) => {
+            // This invigilator already occupies one of the hall's slots if
+            // it's their current assignment, so that hall must never show
+            // as full to them — otherwise the dropdown couldn't even
+            // display their own existing selection.
+            const isCurrent = h.id === invigilator.assignedHallId;
+            const effectiveCount = h.activeCount - (isCurrent ? 1 : 0);
+            const full = !isCurrent && invigilator.isActive && effectiveCount >= MAX_INVIGILATORS_PER_HALL;
+            return (
+              <option key={h.id} value={h.id} disabled={full}>
+                {h.buildingName} · {h.roomNumber} ({h.activeCount}/{MAX_INVIGILATORS_PER_HALL}
+                {full ? " · full" : ""})
+              </option>
+            );
+          })}
         </select>
       </td>
       <td className="px-4 py-3">

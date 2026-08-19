@@ -36,7 +36,11 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isAdminRoute = pathname.startsWith("/admin") && pathname !== "/admin/login";
-  const isStudentRoute = pathname.startsWith("/student") && pathname !== "/student/login";
+  // reset-password is the landing page for a student who's locked out and
+  // has no session by definition — gating it behind one would make the
+  // "forgot password" flow unreachable for the exact case it exists for.
+  const publicStudentPaths = ["/student/login", "/student/reset-password"];
+  const isStudentRoute = pathname.startsWith("/student") && !publicStudentPaths.includes(pathname);
 
   if (!user && isAdminRoute) {
     return NextResponse.redirect(new URL("/admin/login", request.url));

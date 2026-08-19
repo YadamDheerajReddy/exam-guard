@@ -1,7 +1,8 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireOrgAdmin } from "@/lib/admin-context";
-import { Building2, CalendarDays, Info, Users, type LucideIcon } from "lucide-react";
+import { OrgDashboard } from "@/components/admin/org-dashboard";
+import { examStatus } from "@/lib/reveal";
+import { safeTimeZone } from "@/lib/timezone";
 
 export default async function AdminDashboardPage() {
   const admin = await requireOrgAdmin();
@@ -9,30 +10,36 @@ export default async function AdminDashboardPage() {
 
   const { data: org } = await supabase
     .from("organizations")
-    .select("slug")
+    .select("name, slug, timezone")
     .eq("id", admin.organizationId)
     .maybeSingle();
 
-  const [hallsCount, examsCount, mappingsCount, upcomingExams] =
-    await Promise.all([
-      supabase.from("halls").select("id", { count: "exact", head: true }),
-      supabase.from("exams").select("id", { count: "exact", head: true }),
-      supabase
-        .from("student_exam_mappings")
-        .select("id", { count: "exact", head: true }),
-      supabase
-        .from("exams")
-        .select("id, course_code, course_title, exam_date, start_time")
-        .order("exam_date", { ascending: true })
-        .limit(5),
-    ]);
+  const timeZone = safeTimeZone(org?.timezone);
+  // "Today" has to mean today *at the institution* — a UTC date rolls over
+  // at 05:30 IST, which would drop the current day's exams off the board
+  // for anyone working late.
+  const todayIso = new Intl.DateTimeFormat("en-CA", { timeZone }).format(new Date());
+
+  const [hallRows, examsCount, mappingsCount, invigilatorsCount, upcomingExams, photoRows] = await Promise.all([
+    supabase.from("halls").select("capacity"),
+    supabase.from("exams").select("id", { count: "exact", head: true }),
+    supabase.from("student_exam_mappings").select("id", { count: "exact", head: true }),
+    supabase.from("invigilators").select("id", { count: "exact", head: true }),
+    supabase
+      .from("exams")
+      .select("id, course_code, course_title, exam_date, start_time, end_time, reveal_threshold_minutes")
+      .gte("exam_date", todayIso)
+      .order("exam_date", { ascending: true })
+      .limit(8),
+    // Counted in JS rather than a PostgREST .or() — photo_url is NOT NULL
+    // but roster upload writes "" when a CSV omits it, and filtering on an
+    // empty string through the query string is easy to get subtly wrong.
+    supabase.from("students").select("photo_url").eq("is_active", true),
+  ]);
 
   const examIds = upcomingExams.data?.map((e) => e.id) ?? [];
   const { data: mappingRows } = examIds.length
-    ? await supabase
-        .from("student_exam_mappings")
-        .select("exam_id")
-        .in("exam_id", examIds)
+    ? await supabase.from("student_exam_mappings").select("exam_id").in("exam_id", examIds)
     : { data: [] };
 
   const mappedByExam = new Map<string, number>();
@@ -40,100 +47,38 @@ export default async function AdminDashboardPage() {
     mappedByExam.set(row.exam_id, (mappedByExam.get(row.exam_id) ?? 0) + 1);
   }
 
-  const stats: { label: string; value: number; href: string; icon: LucideIcon }[] = [
-    { label: "Halls configured", value: hallsCount.count ?? 0, href: "/admin/halls", icon: Building2 },
-    { label: "Exams created", value: examsCount.count ?? 0, href: "/admin/exams", icon: CalendarDays },
-    { label: "Students mapped", value: mappingsCount.count ?? 0, href: "/admin/exams", icon: Users },
-  ];
+  const seatsCapacity = (hallRows.data ?? []).reduce((sum, h) => sum + h.capacity, 0);
+  const missingPhotos = (photoRows.data ?? []).filter((s) => !s.photo_url?.trim()).length;
+  const now = new Date();
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <h1 className="text-xl font-bold text-ink">Dashboard</h1>
-      <p className="mt-1 text-sm text-slate">Exam-cycle overview.</p>
-
-      {org?.slug && (
-        <div className="mt-4 flex items-center gap-2.5 rounded-lg bg-accent-tint px-4 py-3 text-sm text-accent">
-          <Info className="size-4 shrink-0" strokeWidth={2} />
-          Your Organization ID is <span className="font-mono font-semibold">{org.slug}</span> —
-          students need this, their roll number, and their password to log in.
-        </div>
-      )}
-
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {stats.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <Link
-              key={stat.label}
-              href={stat.href}
-              className="flex items-start justify-between gap-3 rounded-lg border border-border bg-white p-5 transition-all hover:-translate-y-0.5 hover:border-accent hover:shadow-sm"
-            >
-              <div>
-                <p className="text-2xl font-bold text-ink">{stat.value}</p>
-                <p className="mt-1 text-sm text-slate">{stat.label}</p>
-              </div>
-              <Icon className="size-5 shrink-0 text-accent" strokeWidth={2} />
-            </Link>
-          );
-        })}
-      </div>
-
-      <div className="mt-8">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-charcoal">Upcoming exams</h2>
-          <Link href="/admin/exams" className="text-sm font-semibold text-accent">
-            View all
-          </Link>
-        </div>
-
-        <div className="mt-3 overflow-x-auto overflow-hidden rounded-lg border border-border bg-white">
-          {!upcomingExams.data || upcomingExams.data.length === 0 ? (
-            <div className="p-10 text-center">
-              <CalendarDays className="mx-auto size-8 text-slate" strokeWidth={1.5} />
-              <p className="mt-3 text-sm text-slate">
-                No exams yet.{" "}
-                <Link href="/admin/exams" className="font-semibold text-accent">
-                  Create one
-                </Link>
-                .
-              </p>
-            </div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-surface text-left text-xs font-semibold uppercase tracking-wide text-slate">
-                  <th className="px-4 py-3">Course</th>
-                  <th className="px-4 py-3">Date</th>
-                  <th className="px-4 py-3">Start</th>
-                  <th className="px-4 py-3">Mapped</th>
-                </tr>
-              </thead>
-              <tbody>
-                {upcomingExams.data.map((exam) => (
-                  <tr key={exam.id} className="border-b border-border transition-colors last:border-0 hover:bg-surface">
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/admin/exams/${exam.id}/mapping`}
-                        className="font-semibold text-ink hover:text-accent"
-                      >
-                        {exam.course_code}
-                      </Link>
-                      <p className="text-xs text-slate">{exam.course_title}</p>
-                    </td>
-                    <td className="px-4 py-3 text-charcoal">{exam.exam_date}</td>
-                    <td className="px-4 py-3 font-mono text-charcoal">
-                      {exam.start_time}
-                    </td>
-                    <td className="px-4 py-3 text-charcoal">
-                      {mappedByExam.get(exam.id) ?? 0}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-    </div>
+    <OrgDashboard
+      orgName={org?.name ?? "ExamGuard Admin"}
+      orgSlug={org?.slug ?? null}
+      missingPhotos={missingPhotos}
+      totals={{
+        halls: hallRows.data?.length ?? 0,
+        exams: examsCount.count ?? 0,
+        seatsMapped: mappingsCount.count ?? 0,
+        seatsCapacity,
+        invigilators: invigilatorsCount.count ?? 0,
+      }}
+      upcomingExams={(upcomingExams.data ?? []).map((exam) => ({
+        id: exam.id,
+        courseCode: exam.course_code,
+        courseTitle: exam.course_title,
+        examDate: exam.exam_date,
+        startTime: exam.start_time,
+        mapped: mappedByExam.get(exam.id) ?? 0,
+        status: examStatus(
+          now,
+          exam.exam_date,
+          exam.start_time,
+          exam.end_time,
+          exam.reveal_threshold_minutes,
+          timeZone,
+        ),
+      }))}
+    />
   );
 }

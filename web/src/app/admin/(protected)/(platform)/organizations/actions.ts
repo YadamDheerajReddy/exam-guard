@@ -8,6 +8,7 @@ import { requireSuperAdmin } from "@/lib/admin-context";
 import { sendMail } from "@/lib/mailer";
 import { orgAdminCreatedEmail } from "@/lib/email-templates";
 import { absoluteUrl } from "@/lib/site-url";
+import { isCommonTimeZone } from "@/lib/timezone";
 
 const ORG_TYPES = ["COLLEGE", "UNIVERSITY", "SCHOOL", "OTHER"] as const;
 
@@ -24,12 +25,19 @@ export async function createOrganizationWithAdmin(
 
   const orgName = String(formData.get("orgName") ?? "").trim();
   const orgType = String(formData.get("orgType") ?? "OTHER");
+  const orgTimezone = String(formData.get("orgTimezone") ?? "Asia/Kolkata");
   const adminFullName = String(formData.get("adminFullName") ?? "").trim();
   const adminEmail = String(formData.get("adminEmail") ?? "").trim().toLowerCase();
 
   if (!orgName) return { error: "Organization name is required." };
   if (!ORG_TYPES.includes(orgType as (typeof ORG_TYPES)[number])) {
     return { error: "Invalid organization type." };
+  }
+  // Server actions are untrusted entry points, and this value feeds every
+  // reveal/completion calculation for the org — validate against the closed
+  // list rather than trusting the select.
+  if (!isCommonTimeZone(orgTimezone)) {
+    return { error: "Invalid timezone." };
   }
   if (!adminFullName) return { error: "Admin name is required." };
   if (!adminEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) {
@@ -43,7 +51,7 @@ export async function createOrganizationWithAdmin(
   // login are blocked until that's set.
   const { data: org, error: orgError } = await service
     .from("organizations")
-    .insert({ name: orgName, type: orgType })
+    .insert({ name: orgName, type: orgType, timezone: orgTimezone })
     .select("id")
     .single();
 

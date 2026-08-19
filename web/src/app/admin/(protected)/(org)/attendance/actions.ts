@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requireOrgAdmin } from "@/lib/admin-context";
+import { safeTimeZone, zonedDateTimeToUtc } from "@/lib/timezone";
 
 export type HallRollup = {
   hallId: string;
@@ -58,8 +59,15 @@ export async function getAttendanceRollup(examId: string): Promise<AttendanceRol
     ? await supabase.from("verification_logs").select("mapping_id, status, verified_at").in("mapping_id", mappingIds)
     : { data: [] };
 
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("timezone")
+    .eq("id", admin.organizationId)
+    .maybeSingle();
+
   const now = new Date();
-  const examStarted = now >= new Date(`${exam.exam_date}T${exam.start_time}`);
+  const examStarted =
+    now >= zonedDateTimeToUtc(exam.exam_date, exam.start_time, safeTimeZone(org?.timezone));
 
   const logsByMapping = new Map<string, { status: string; verifiedAt: string }[]>();
   for (const log of logs ?? []) {

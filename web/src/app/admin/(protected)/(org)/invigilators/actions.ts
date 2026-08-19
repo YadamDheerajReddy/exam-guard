@@ -8,11 +8,38 @@ import { requireOrgAdmin } from "@/lib/admin-context";
 import { invigilatorTempPassword } from "@/lib/student-auth";
 import { sendMail } from "@/lib/mailer";
 import { invigilatorCreatedEmail } from "@/lib/email-templates";
+import { MAX_INVIGILATORS_PER_HALL } from "@/lib/hall-capacity";
 
 export type CreateInvigilatorState =
   | { error: string }
   | { success: true; email: string; tempPassword: string }
   | undefined;
+
+// Only active invigilators occupy a slot — an inactive one is already
+// blocked from every /api/invigilator/* call (requireInvigilator), so it
+// isn't functionally staffing the hall. Counting it anyway would strand an
+// admin who deactivated someone and now can't assign their replacement to
+// the same room.
+async function activeInvigilatorCountInHall(
+  supabase: Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdminClient>,
+  hallId: string,
+  excludeInvigilatorId?: string,
+): Promise<number> {
+  let query = supabase
+    .from("invigilators")
+    .select("id", { count: "exact", head: true })
+    .eq("assigned_hall_id", hallId)
+    .eq("is_active", true);
+  if (excludeInvigilatorId) query = query.neq("id", excludeInvigilatorId);
+  const { count } = await query;
+  return count ?? 0;
+}
+
+function hallFullError(): { error: string } {
+  return {
+    error: `This hall already has ${MAX_INVIGILATORS_PER_HALL} active invigilators assigned. Reassign or deactivate one first.`,
+  };
+}
 
 export async function createInvigilator(
   _prevState: CreateInvigilatorState,
@@ -46,6 +73,12 @@ export async function createInvigilator(
     .eq("email", email)
     .maybeSingle();
   if (existing) return { error: "An invigilator with that email already exists." };
+
+  // New invigilators are active by default (schema default), so they'd
+  // occupy a slot immediately.
+  if (assignedHallId && (await activeInvigilatorCountInHall(service, assignedHallId)) >= MAX_INVIGILATORS_PER_HALL) {
+    return hallFullError();
+  }
 
   // Deterministic like the student temp password — {organizationName}@#{organizationId}
   // — so an admin printing exam-day instructions can hand every invigilator
@@ -86,6 +119,25 @@ export async function setInvigilatorActive(
 ): Promise<{ error?: string }> {
   await requireOrgAdmin();
   const supabase = await createClient();
+
+  // Reactivating can silently overflow a hall: assign A and B to a hall
+  // (full), deactivate A, assign C to the now-open slot, then reactivate A
+  // — without this check that hall ends up with 3 active invigilators.
+  if (isActive) {
+    const { data: invigilator } = await supabase
+      .from("invigilators")
+      .select("assigned_hall_id")
+      .eq("id", invigilatorId)
+      .maybeSingle();
+    if (
+      invigilator?.assigned_hall_id &&
+      (await activeInvigilatorCountInHall(supabase, invigilator.assigned_hall_id, invigilatorId)) >=
+        MAX_INVIGILATORS_PER_HALL
+    ) {
+      return hallFullError();
+    }
+  }
+
   const { error } = await supabase
     .from("invigilators")
     .update({ is_active: isActive })
@@ -102,6 +154,25 @@ export async function reassignInvigilatorHall(
 ): Promise<{ error?: string }> {
   await requireOrgAdmin();
   const supabase = await createClient();
+
+  // An inactive invigilator doesn't occupy a slot (requireInvigilator blocks
+  // every API call for them regardless), so pre-assigning one to an
+  // otherwise-full hall is fine — the cap only has to hold once they're
+  // active, which setInvigilatorActive enforces separately at that point.
+  if (hallId) {
+    const { data: invigilator } = await supabase
+      .from("invigilators")
+      .select("is_active")
+      .eq("id", invigilatorId)
+      .maybeSingle();
+    if (
+      invigilator?.is_active &&
+      (await activeInvigilatorCountInHall(supabase, hallId, invigilatorId)) >= MAX_INVIGILATORS_PER_HALL
+    ) {
+      return hallFullError();
+    }
+  }
+
   const { error } = await supabase
     .from("invigilators")
     .update({ assigned_hall_id: hallId || null })

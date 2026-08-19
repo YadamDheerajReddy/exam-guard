@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { signBarcodeToken } from "@/lib/barcode-token";
+import { safeTimeZone, zonedDateTimeToUtc } from "@/lib/timezone";
 
 export type MappingAssignment = {
   studentId: string;
@@ -25,7 +26,7 @@ export async function createMappings(
 
   const { data: exam, error: examError } = await supabase
     .from("exams")
-    .select("id, exam_date, end_time")
+    .select("id, exam_date, end_time, organizations(timezone)")
     .eq("id", examId)
     .maybeSingle();
 
@@ -37,11 +38,15 @@ export async function createMappings(
     }));
   }
 
+  const examOrg = Array.isArray(exam.organizations) ? exam.organizations[0] : exam.organizations;
+
   // Base token stays valid through the exam window plus a buffer for
   // clock skew / late finishes, distinct from the rotating short-lived
-  // display token the student portal issues in Phase 2.
-  const expiresAt = new Date(`${exam.exam_date}T${exam.end_time}`);
-  expiresAt.setHours(expiresAt.getHours() + 6);
+  // display token the student portal issues in Phase 2. The end time is a
+  // wall-clock value at the institution, so it resolves against the org's
+  // zone — not the server's.
+  const examEnd = zonedDateTimeToUtc(exam.exam_date, exam.end_time, safeTimeZone(examOrg?.timezone));
+  const expiresAt = new Date(examEnd.getTime() + 6 * 60 * 60 * 1000);
 
   const results: MappingResult[] = [];
 

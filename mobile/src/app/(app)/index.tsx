@@ -7,7 +7,7 @@ import { useInvigilator } from "@/context/invigilator-context";
 import { useScanSession } from "@/context/scan-session-context";
 import { SyncStatusBar } from "@/components/sync-status-bar";
 import { Logo } from "@/components/logo";
-import { fetchExams, type ExamSummary } from "@/lib/api";
+import { ApiError, fetchExams, type ExamSummary } from "@/lib/api";
 import { Colors, Radius } from "@/constants/theme";
 
 export default function HomeScreen() {
@@ -20,14 +20,20 @@ export default function HomeScreen() {
   const { session: activeSession, presyncing, presyncError, startSession, endSession } = useScanSession();
   const [exams, setExams] = useState<ExamSummary[] | null>(null);
   const [examsError, setExamsError] = useState<string | null>(null);
+  const [examsAuthError, setExamsAuthError] = useState(false);
 
   const invigilator = lookup.status === "ready" ? lookup.invigilator : null;
 
   useEffect(() => {
     if (!invigilator?.assignedHallId || activeSession) return;
+    setExamsError(null);
+    setExamsAuthError(false);
     fetchExams()
       .then(setExams)
-      .catch((err) => setExamsError(err instanceof Error ? err.message : "Couldn't load exams."));
+      .catch((err) => {
+        setExamsAuthError(err instanceof ApiError && err.isAuthError);
+        setExamsError(err instanceof Error ? err.message : "Couldn't load exams.");
+      });
   }, [invigilator?.assignedHallId, activeSession]);
 
   if (!invigilator) return null;
@@ -94,6 +100,11 @@ export default function HomeScreen() {
           {examsError && (
             <View style={styles.errorBox}>
               <Text style={styles.errorText}>{examsError}</Text>
+              {examsAuthError && (
+                <TouchableOpacity style={styles.errorAction} onPress={() => signOut()}>
+                  <Text style={styles.errorActionText}>Sign out and sign in again</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
           {presyncing ? (
@@ -190,6 +201,8 @@ const styles = StyleSheet.create({
   loadingRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12 },
   errorBox: { backgroundColor: Colors.alertTint, borderRadius: Radius, padding: 12, marginBottom: 12 },
   errorText: { color: Colors.alert, fontSize: 13 },
+  errorAction: { marginTop: 8 },
+  errorActionText: { color: Colors.alert, fontSize: 13, fontWeight: "700", textDecorationLine: "underline" },
   primaryButton: {
     marginTop: 20,
     backgroundColor: Colors.accent,

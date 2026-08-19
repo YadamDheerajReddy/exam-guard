@@ -9,10 +9,18 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
+// Easing must come from Reanimated: layout-animation builders run their
+// easing on the UI thread, so it has to be a worklet. A plain JS arrow
+// throws "The easing function is not a worklet" on a real device (web only
+// warns and silently falls back to linear, which is how this slipped past
+// the browser preview).
+import Animated, { Easing, FadeInDown, FadeInUp } from "react-native-reanimated";
 import { supabase } from "@/lib/supabase";
 import { checkLoginPassword } from "@/lib/api";
 import { setPendingLoginCheck } from "@/lib/pending-login-check";
 import { Logo } from "@/components/logo";
+import { ScanVisual } from "@/components/auth/scan-visual";
 import { Colors, Radius } from "@/constants/theme";
 
 export default function LoginScreen() {
@@ -56,10 +64,30 @@ export default function LoginScreen() {
         style={styles.container}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View style={styles.card}>
-          <Logo size={26} />
-          <Text style={styles.title}>Invigilator Scanner</Text>
-          <Text style={styles.subtitle}>Sign in with your institutional email.</Text>
+        <Animated.View entering={FadeInUp.duration(450).easing(Easing.out(Easing.cubic))}>
+          <LinearGradient
+            colors={["#122c56", Colors.accent, "#0d7ce0"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.hero}
+          >
+            <View style={styles.eyebrowRow}>
+              <Logo size={18} withWordmark={false} inverted />
+              <Text style={styles.eyebrow}>INVIGILATOR SCANNER</Text>
+            </View>
+            <View style={styles.scanWrap}>
+              <ScanVisual />
+            </View>
+            <Text style={styles.tagline}>Scan once. Identity, hall, and seat verified instantly — online or off.</Text>
+          </LinearGradient>
+        </Animated.View>
+
+        <Animated.View
+          entering={FadeInDown.delay(120).duration(400).easing(Easing.out(Easing.cubic))}
+          style={styles.card}
+        >
+          <Text style={styles.title}>Sign in</Text>
+          <Text style={styles.subtitle}>Use your institutional email.</Text>
 
           <View style={styles.field}>
             <Text style={styles.label}>Email</Text>
@@ -89,19 +117,20 @@ export default function LoginScreen() {
           </View>
 
           {error && (
-            <View style={styles.errorBox}>
+            <Animated.View entering={FadeInDown.duration(200)} style={styles.errorBox}>
               <Text style={styles.errorText}>{error}</Text>
-            </View>
+            </Animated.View>
           )}
 
           <TouchableOpacity
             style={[styles.button, submitting && styles.buttonDisabled]}
             onPress={handleSignIn}
             disabled={submitting}
+            activeOpacity={0.85}
           >
             <Text style={styles.buttonText}>{submitting ? "Signing in…" : "Sign in"}</Text>
           </TouchableOpacity>
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -117,15 +146,47 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 24,
   },
+  hero: {
+    borderTopLeftRadius: Radius * 2,
+    borderTopRightRadius: Radius * 2,
+    paddingTop: 24,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    alignItems: "center",
+  },
+  eyebrowRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    alignSelf: "flex-start",
+  },
+  eyebrow: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+    color: "rgba(255,255,255,0.8)",
+  },
+  scanWrap: {
+    marginTop: 12,
+    marginBottom: 12,
+    alignItems: "center",
+  },
+  tagline: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: "rgba(255,255,255,0.75)",
+    textAlign: "center",
+  },
   card: {
     backgroundColor: Colors.white,
-    borderRadius: Radius,
+    borderBottomLeftRadius: Radius * 2,
+    borderBottomRightRadius: Radius * 2,
     borderWidth: 1,
+    borderTopWidth: 0,
     borderColor: Colors.border,
     padding: 24,
   },
   title: {
-    marginTop: 16,
     fontSize: 20,
     fontWeight: "700",
     color: Colors.ink,

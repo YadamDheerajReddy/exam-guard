@@ -1,32 +1,66 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
-import { createExam } from "@/app/admin/(protected)/(org)/exams/actions";
+import { createExam, type ExamFormState } from "@/app/admin/(protected)/(org)/exams/actions";
+import { zonedDateTimeToUtc } from "@/lib/timezone";
 
-function revealPreview(examDate: string, startTime: string, thresholdMinutes: number) {
+// Mirrors the server's reveal maths (lib/reveal.ts) rather than parsing the
+// times in the admin's own browser zone — otherwise an admin working from a
+// different timezone than their institution would be shown a reveal time
+// that doesn't match what students actually get.
+function revealPreview(examDate: string, startTime: string, thresholdMinutes: number, timeZone: string) {
   if (!examDate || !startTime || !Number.isFinite(thresholdMinutes)) return null;
 
-  const start = new Date(`${examDate}T${startTime}`);
+  const start = zonedDateTimeToUtc(examDate, startTime, timeZone);
   if (Number.isNaN(start.getTime())) return null;
 
   const reveal = new Date(start.getTime() - thresholdMinutes * 60_000);
   const timeFormatter = new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
     minute: "2-digit",
+    timeZone,
   });
 
-  return `Students will see their hall at ${timeFormatter.format(reveal)} for a ${timeFormatter.format(start)} exam.`;
+  return `Students will see their hall at ${timeFormatter.format(reveal)} for a ${timeFormatter.format(start)} exam (${timeZone.replace(/_/g, " ")}).`;
 }
 
-export function ExamForm() {
-  const [state, formAction, pending] = useActionState(createExam, undefined);
-  const [examDate, setExamDate] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [thresholdMinutes, setThresholdMinutes] = useState(30);
+type ExamDefaults = {
+  courseCode: string;
+  courseTitle: string;
+  examDate: string;
+  startTime: string;
+  endTime: string;
+  revealThresholdMinutes: number;
+};
+
+export function ExamForm({
+  timeZone,
+  action = createExam,
+  submitLabel = "Create exam",
+  defaultValues,
+  onDone,
+}: {
+  timeZone: string;
+  action?: (state: ExamFormState, formData: FormData) => Promise<ExamFormState>;
+  submitLabel?: string;
+  defaultValues?: ExamDefaults;
+  onDone?: () => void;
+}) {
+  const [state, formAction, pending] = useActionState(
+    async (prevState: ExamFormState, formData: FormData) => {
+      const result = await action(prevState, formData);
+      if (!result?.error) onDone?.();
+      return result;
+    },
+    undefined,
+  );
+  const [examDate, setExamDate] = useState(defaultValues?.examDate ?? "");
+  const [startTime, setStartTime] = useState(defaultValues?.startTime ?? "");
+  const [thresholdMinutes, setThresholdMinutes] = useState(defaultValues?.revealThresholdMinutes ?? 30);
 
   const preview = useMemo(
-    () => revealPreview(examDate, startTime, thresholdMinutes),
-    [examDate, startTime, thresholdMinutes],
+    () => revealPreview(examDate, startTime, thresholdMinutes, timeZone),
+    [examDate, startTime, thresholdMinutes, timeZone],
   );
 
   return (
@@ -35,12 +69,14 @@ export function ExamForm() {
         name="courseCode"
         placeholder="Course code (e.g. CS301)"
         required
+        defaultValue={defaultValues?.courseCode}
         className="rounded-lg border border-border px-3 py-2 text-sm text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint"
       />
       <input
         name="courseTitle"
         placeholder="Course title"
         required
+        defaultValue={defaultValues?.courseTitle}
         className="rounded-lg border border-border px-3 py-2 text-sm text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint"
       />
       <input
@@ -64,6 +100,7 @@ export function ExamForm() {
           name="endTime"
           type="time"
           required
+          defaultValue={defaultValues?.endTime}
           className="rounded-lg border border-border px-3 py-2 text-sm text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint"
         />
       </div>
@@ -95,14 +132,23 @@ export function ExamForm() {
         </p>
       )}
 
-      <div className="sm:col-span-2">
+      <div className="sm:col-span-2 flex gap-2">
         <button
           type="submit"
           disabled={pending}
           className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
         >
-          {pending ? "Creating…" : "Create exam"}
+          {pending ? "Saving…" : submitLabel}
         </button>
+        {onDone && (
+          <button
+            type="button"
+            onClick={onDone}
+            className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-charcoal transition-colors hover:bg-white"
+          >
+            Cancel
+          </button>
+        )}
       </div>
     </form>
   );

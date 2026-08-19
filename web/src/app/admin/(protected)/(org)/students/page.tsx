@@ -3,8 +3,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireOrgAdmin } from "@/lib/admin-context";
 import { StudentsTable } from "@/components/admin/students-table";
 
-export default async function StudentsPage() {
+export default async function StudentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ missingPhoto?: string }>;
+}) {
   const admin = await requireOrgAdmin();
+  const { missingPhoto } = await searchParams;
   const supabase = await createClient();
 
   const { data: students } = await supabase
@@ -38,6 +43,7 @@ export default async function StudentsPage() {
 
       <div className="mt-6">
         <StudentsTable
+          initialMissingPhotoOnly={missingPhoto === "1"}
           students={(students ?? []).map((s) => ({
             id: s.id,
             rollNumber: s.roll_number,
@@ -46,6 +52,7 @@ export default async function StudentsPage() {
             department: s.department,
             isActive: s.is_active,
             photoUrl: s.photo_url ? (signedUrlByPath.get(s.photo_url) ?? null) : null,
+            hasPhoto: Boolean(s.photo_url?.trim()),
           }))}
         />
       </div>

@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import { OrganizationForm } from "@/components/admin/organization-form";
-import { OrganizationsTable } from "@/components/admin/organizations-table";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { PlatformDashboard } from "@/components/admin/platform-dashboard";
 
 export default async function OrganizationsPage() {
   const supabase = await createClient();
@@ -25,27 +25,52 @@ export default async function OrganizationsPage() {
     adminsByOrg.set(a.organization_id, list);
   }
 
+  // Super admins have no RLS path to students/invigilators/halls/exams
+  // (org-scoped tables) — service role for these read-only aggregate
+  // counts, same justified pattern as other cross-tenant reads in this
+  // codebase. Only organization_id + head-counts are fetched, never row
+  // data, so no student/invigilator PII crosses this boundary.
+  const service = createAdminClient();
+  const [studentRows, invigilatorRows, examCount, hallCount] = await Promise.all([
+    service.from("students").select("organization_id"),
+    service.from("invigilators").select("organization_id"),
+    service.from("exams").select("id", { count: "exact", head: true }),
+    service.from("halls").select("id", { count: "exact", head: true }),
+  ]);
+
+  const studentsByOrg = new Map<string, number>();
+  for (const s of studentRows.data ?? []) {
+    studentsByOrg.set(s.organization_id, (studentsByOrg.get(s.organization_id) ?? 0) + 1);
+  }
+  const invigilatorsByOrg = new Map<string, number>();
+  for (const i of invigilatorRows.data ?? []) {
+    invigilatorsByOrg.set(i.organization_id, (invigilatorsByOrg.get(i.organization_id) ?? 0) + 1);
+  }
+
+  const orgsForDashboard = (orgs ?? []).map((org) => ({
+    id: org.id,
+    name: org.name,
+    type: org.type,
+    isSuspended: org.is_suspended,
+    createdAt: org.created_at,
+    admins: (adminsByOrg.get(org.id) ?? []).map((a) => ({ fullName: a.full_name, email: a.email })),
+    studentCount: studentsByOrg.get(org.id) ?? 0,
+    invigilatorCount: invigilatorsByOrg.get(org.id) ?? 0,
+  }));
+
   return (
-    <div className="mx-auto max-w-4xl">
-      <h1 className="text-xl font-bold text-ink">Organizations</h1>
-      <p className="mt-1 text-sm text-slate">Institutions using ExamGuard.</p>
-
-      <div className="mt-6 rounded-lg border border-border bg-white p-5">
-        <h2 className="text-sm font-semibold text-charcoal">Create an organization</h2>
-        <OrganizationForm />
-      </div>
-
-      <div className="mt-6">
-        <OrganizationsTable
-          orgs={(orgs ?? []).map((org) => ({
-            id: org.id,
-            name: org.name,
-            type: org.type,
-            isSuspended: org.is_suspended,
-            admins: (adminsByOrg.get(org.id) ?? []).map((a) => ({ fullName: a.full_name, email: a.email })),
-          }))}
-        />
-      </div>
-    </div>
+    <PlatformDashboard
+      orgs={orgsForDashboard}
+      totals={{
+        organizations: orgsForDashboard.length,
+        active: orgsForDashboard.filter((o) => !o.isSuspended).length,
+        onHold: orgsForDashboard.filter((o) => o.isSuspended).length,
+        admins: admins?.length ?? 0,
+        students: studentRows.data?.length ?? 0,
+        invigilators: invigilatorRows.data?.length ?? 0,
+        exams: examCount.count ?? 0,
+        halls: hallCount.count ?? 0,
+      }}
+    />
   );
 }

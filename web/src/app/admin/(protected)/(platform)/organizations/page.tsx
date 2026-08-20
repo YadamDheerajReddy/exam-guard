@@ -6,18 +6,18 @@ export default async function OrganizationsPage() {
   const supabase = await createClient();
   const { data: orgs } = await supabase
     .from("organizations")
-    .select("id, name, type, is_suspended, created_at")
+    .select("id, name, type, slug, is_suspended, created_at")
     .order("created_at", { ascending: false });
 
   const orgIds = orgs?.map((o) => o.id) ?? [];
   const { data: admins } = orgIds.length
     ? await supabase
         .from("admins")
-        .select("organization_id, full_name, email")
+        .select("id, organization_id, full_name, email, role")
         .in("organization_id", orgIds)
     : { data: [] };
 
-  const adminsByOrg = new Map<string, { full_name: string; email: string }[]>();
+  const adminsByOrg = new Map<string, { id: string; full_name: string; email: string; role: string }[]>();
   for (const a of admins ?? []) {
     if (!a.organization_id) continue;
     const list = adminsByOrg.get(a.organization_id) ?? [];
@@ -51,9 +51,10 @@ export default async function OrganizationsPage() {
     id: org.id,
     name: org.name,
     type: org.type,
+    slug: org.slug,
     isSuspended: org.is_suspended,
     createdAt: org.created_at,
-    admins: (adminsByOrg.get(org.id) ?? []).map((a) => ({ fullName: a.full_name, email: a.email })),
+    admins: (adminsByOrg.get(org.id) ?? []).map((a) => ({ id: a.id, fullName: a.full_name, email: a.email, role: a.role })),
     studentCount: studentsByOrg.get(org.id) ?? 0,
     invigilatorCount: invigilatorsByOrg.get(org.id) ?? 0,
   }));

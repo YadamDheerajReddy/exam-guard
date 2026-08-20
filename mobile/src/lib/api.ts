@@ -121,6 +121,12 @@ export async function checkLoginPassword(password: string): Promise<{ mustChange
   });
 }
 
+export type OrgBranding = { name: string | null; logoUrl: string | null };
+
+export async function fetchOrgBranding(): Promise<OrgBranding> {
+  return request<OrgBranding>("/api/invigilator/org-branding");
+}
+
 export async function changeInvigilatorPassword(newPassword: string): Promise<void> {
   await request("/api/invigilator/change-password", {
     method: "POST",

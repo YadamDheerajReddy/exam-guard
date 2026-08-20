@@ -40,7 +40,15 @@ export function normalizeHeader(header: string): keyof RosterRow | null {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function validateRosterRows(rows: RosterRow[], fieldLabel = "department"): ValidatedRosterRow[] {
+// emailRequired is false for school orgs — many school students have no
+// email at all. When it's not required, a blank email is fine, but a
+// *non-blank* one is still format-checked and deduped — an admin who does
+// type something wrong still needs to hear about it.
+export function validateRosterRows(
+  rows: RosterRow[],
+  fieldLabel = "department",
+  emailRequired = true,
+): ValidatedRosterRow[] {
   const rollSeen = new Set<string>();
   const emailSeen = new Set<string>();
 
@@ -54,18 +62,18 @@ export function validateRosterRows(rows: RosterRow[], fieldLabel = "department")
     let error: string | null = null;
     if (!rollNumber) error = "Missing roll number.";
     else if (!fullName) error = "Missing name.";
-    else if (!email) error = "Missing email.";
-    else if (!EMAIL_RE.test(email)) error = "Invalid email format.";
+    else if (emailRequired && !email) error = "Missing email.";
+    else if (email && !EMAIL_RE.test(email)) error = "Invalid email format.";
     else if (!department) error = `Missing ${fieldLabel}.`;
     else if (rollSeen.has(rollNumber)) {
       error = "Duplicate roll number in this list.";
-    } else if (emailSeen.has(email)) {
+    } else if (email && emailSeen.has(email)) {
       error = "Duplicate email in this list.";
     }
 
     if (!error) {
       rollSeen.add(rollNumber);
-      emailSeen.add(email);
+      if (email) emailSeen.add(email);
     }
 
     return { rollNumber, fullName, email, department, photoUrl, error };

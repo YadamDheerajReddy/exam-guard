@@ -1,10 +1,9 @@
-import { QRCodeSVG } from "qrcode.react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireStudent } from "@/lib/student-context";
 import { getExamPass } from "../actions";
 import { PrintButton } from "./print-button";
-import { Logo } from "@/components/logo";
-import { AlertTriangle } from "lucide-react";
+import { HallTicket, type HallTicketCustomization } from "@/components/print/hall-ticket";
+import { getHallTicketCustomization } from "@/lib/hall-ticket-customization";
 
 export default async function ExamPassPrintPage({
   params,
@@ -13,28 +12,29 @@ export default async function ExamPassPrintPage({
 }) {
   const { examId } = await params;
   const student = await requireStudent();
+  const service = createAdminClient();
   const [pass, orgResult] = await Promise.all([
     getExamPass(examId),
-    createAdminClient().from("organizations").select("name").eq("id", student.organizationId).maybeSingle(),
+    service.from("organizations").select("name, type, logo_url").eq("id", student.organizationId).maybeSingle(),
   ]);
   const orgName = orgResult.data?.name ?? "ExamGuard";
+
+  // Logo and full customization only for school orgs on the printed
+  // ticket, per spec — other org types keep the plain default look.
+  let orgLogoUrl: string | null = null;
+  let customization: HallTicketCustomization | null = null;
+  if (orgResult.data?.type === "SCHOOL") {
+    if (orgResult.data.logo_url) {
+      const { data: signed } = await service.storage.from("org-logos").createSignedUrl(orgResult.data.logo_url, 300);
+      orgLogoUrl = signed?.signedUrl ?? null;
+    }
+    customization = await getHallTicketCustomization(service, student.organizationId);
+  }
 
   if (!pass.ok) {
     return (
       <main className="mx-auto max-w-lg px-6 py-16 text-center">
         <p className="text-sm text-slate">{pass.error}</p>
-      </main>
-    );
-  }
-
-  if (!pass.displayToken) {
-    return (
-      <main className="mx-auto max-w-lg px-6 py-16 text-center">
-        <p className="text-sm text-slate">
-          {pass.completed
-            ? `This pass has expired — ${pass.courseCode} ended at ${pass.endTime}.`
-            : "This pass isn't ready to print yet."}
-        </p>
       </main>
     );
   }
@@ -51,77 +51,26 @@ export default async function ExamPassPrintPage({
 
       <PrintButton />
 
-      <div className="mx-auto max-w-md rounded-2xl border-2 border-ink/10 bg-white p-8 shadow-sm print:mx-0 print:max-w-none print:rounded-none print:border-2 print:border-black print:shadow-none">
-        <div className="flex items-center justify-between border-b-2 border-dashed border-border pb-4">
-          <div className="flex items-center gap-2">
-            <Logo size={22} withWordmark={false} />
-            <div>
-              <p className="text-sm font-bold text-ink">{orgName}</p>
-              <p className="text-xs uppercase tracking-wide text-slate">Exam Pass</p>
-            </div>
-          </div>
-          {pass.hall && (
-            <div className="text-right">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate">Seat</p>
-              <p className="font-mono text-lg font-extrabold text-ink">{pass.hall.seatNumber}</p>
-            </div>
-          )}
-        </div>
-
-        <div className="mt-5 flex items-start gap-4">
-          {pass.photoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- signed Supabase Storage URL, rendered once at print time
-            <img
-              src={pass.photoUrl}
-              alt=""
-              className="h-24 w-24 shrink-0 rounded-lg border border-border object-cover print:border-black"
-            />
-          ) : (
-            <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-lg border border-dashed border-border bg-surface text-[10px] text-slate print:border-black">
-              No photo
-            </div>
-          )}
-          <div className="min-w-0">
-            <p className="text-lg font-extrabold leading-tight text-ink">{pass.studentFullName}</p>
-            <p className="mt-0.5 font-mono text-sm text-charcoal">{pass.studentRollNumber}</p>
-            <p className="mt-3 text-sm font-bold text-ink">{pass.courseCode}</p>
-            <p className="text-sm text-charcoal">{pass.courseTitle}</p>
-            <p className="mt-1 text-xs text-slate">
-              {pass.examDate} · {pass.startTime}–{pass.endTime}
-            </p>
-          </div>
-        </div>
-
-        {pass.hall ? (
-          <div className="mt-5 grid grid-cols-3 gap-2 rounded-lg bg-surface p-3 text-center print:bg-white print:border print:border-black">
-            <div>
-              <p className="text-[9px] font-semibold uppercase tracking-wide text-slate">Building</p>
-              <p className="text-sm font-bold text-ink">{pass.hall.buildingName}</p>
-            </div>
-            <div>
-              <p className="text-[9px] font-semibold uppercase tracking-wide text-slate">Room</p>
-              <p className="text-sm font-bold text-ink">{pass.hall.roomNumber}</p>
-            </div>
-            <div>
-              <p className="text-[9px] font-semibold uppercase tracking-wide text-slate">Seat</p>
-              <p className="font-mono text-sm font-bold text-ink">{pass.hall.seatNumber}</p>
-            </div>
-          </div>
-        ) : (
-          <p className="mt-5 flex items-center gap-1.5 rounded-lg bg-pending-tint p-3 text-xs text-pending print:bg-white print:border print:border-black print:text-black">
-            <AlertTriangle className="size-3.5 shrink-0" strokeWidth={2} />
-            Hall and seat hadn&apos;t been revealed yet when this was printed — reprint closer to the exam.
-          </p>
-        )}
-
-        <div className="mt-6 flex flex-col items-center gap-2 border-t-2 border-dashed border-border pt-6">
-          <QRCodeSVG value={pass.displayToken} size={220} />
-          <p className="mt-1 text-center text-[11px] leading-relaxed text-slate">
-            Present this printed pass with a valid photo ID at the exam hall entrance. This code is scanned once
-            for entry.
-          </p>
-        </div>
-      </div>
+      <HallTicket
+        orgName={orgName}
+        orgLogoUrl={orgLogoUrl}
+        customization={customization}
+        studentFullName={pass.studentFullName}
+        studentRollNumber={pass.studentRollNumber}
+        photoUrl={pass.photoUrl}
+        exams={[
+          {
+            courseCode: pass.courseCode,
+            courseTitle: pass.courseTitle,
+            examDate: pass.examDate,
+            startTime: pass.startTime,
+            endTime: pass.endTime,
+            hall: pass.hall,
+            displayToken: pass.displayToken,
+            completed: pass.completed,
+          },
+        ]}
+      />
     </main>
   );
 }

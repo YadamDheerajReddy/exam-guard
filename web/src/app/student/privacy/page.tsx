@@ -21,21 +21,6 @@ export default async function StudentPrivacyPage() {
       .order("requested_at", { ascending: false }),
   ]);
 
-  // verification_logs concerning this student are reached through their
-  // mappings — a student has no direct grant on that table (matches the
-  // rest of the app: it's redacted/scoped server-side, not via a client
-  // table grant), so this is the one legitimate read of it in their voice.
-  const mappingIds = (
-    await service.from("student_exam_mappings").select("id").eq("student_id", student.id)
-  ).data?.map((m) => m.id) ?? [];
-  const { data: logs } = mappingIds.length
-    ? await service
-        .from("verification_logs")
-        .select("status, verified_at, notes")
-        .in("mapping_id", mappingIds)
-        .order("verified_at", { ascending: false })
-    : { data: [] };
-
   let photoUrl: string | null = null;
   if (studentRow?.photo_url) {
     const { data: signed } = await service.storage.from("student-photos").createSignedUrl(studentRow.photo_url, 300);
@@ -94,20 +79,6 @@ export default async function StudentPrivacyPage() {
               );
             })}
           </ul>
-        )}
-
-        {logs && logs.length > 0 && (
-          <>
-            <h3 className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate">Verification history</h3>
-            <ul className="mt-2 flex flex-col gap-1.5">
-              {logs.map((log, i) => (
-                <li key={i} className="text-xs text-slate">
-                  {new Date(log.verified_at).toLocaleString()} · {log.status}
-                  {log.notes && ` · ${log.notes}`}
-                </li>
-              ))}
-            </ul>
-          </>
         )}
       </div>
 

@@ -2,7 +2,14 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createMappings, type MappingAssignment } from "@/app/admin/(protected)/(org)/exams/[examId]/mapping/actions";
+import Link from "next/link";
+import {
+  createMappings,
+  createGroupMappings,
+  type MappingAssignment,
+  type GroupMappingRowResult,
+} from "@/app/admin/(protected)/(org)/exams/[examId]/mapping/actions";
+import { Printer } from "lucide-react";
 
 type Hall = {
   id: string;
@@ -29,14 +36,20 @@ type RosterBatch = {
   label: string;
   studentIds: string[];
 };
+type ExamGroup = {
+  id: string;
+  name: string;
+  exams: { id: string; courseCode: string }[];
+};
 type Assignment = {
   studentId: string;
   rollNumber: string;
   fullName: string;
   hallId: string;
   seatNumber: string;
-  status: "pending" | "created" | "error";
+  status: "pending" | "created" | "partial" | "error";
   error?: string;
+  groupResults?: GroupMappingRowResult[];
 };
 
 function hallLabel(hall: Hall) {
@@ -85,18 +98,25 @@ function interleaveByDepartment(students: Student[]): Student[] {
 
 export function MappingBuilder({
   examId,
+  isSchool,
+  examGroup,
   halls,
-  students,
+  studentsForExamMode,
+  studentsForGroupMode,
   rosterBatches,
   existingMappings,
 }: {
   examId: string;
+  isSchool: boolean;
+  examGroup: ExamGroup | null;
   halls: Hall[];
-  students: Student[];
+  studentsForExamMode: Student[];
+  studentsForGroupMode: Student[];
   rosterBatches: RosterBatch[];
   existingMappings: ExistingMapping[];
 }) {
   const router = useRouter();
+  const [scope, setScope] = useState<"exam" | "group">("exam");
   const [department, setDepartment] = useState("all");
   const [batchId, setBatchId] = useState("all");
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
@@ -105,6 +125,18 @@ export function MappingBuilder({
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const students = examGroup && scope === "group" ? studentsForGroupMode : studentsForExamMode;
+
+  // The two pools differ (group mode includes students already mapped to
+  // this exam but missing another one in the group) — a selection made
+  // under one scope can point at a student not offered under the other, so
+  // switching scopes drops the in-progress selection rather than carry
+  // over ids that might not resolve.
+  function changeScope(next: "exam" | "group") {
+    setScope(next);
+    setSelectedStudentIds(new Set());
+  }
 
   const departments = useMemo(
     () => Array.from(new Set(students.map((s) => s.department))).sort(),
@@ -235,21 +267,45 @@ export function MappingBuilder({
 
     startTransition(async () => {
       try {
-        const results = await createMappings(examId, payload);
-        const byId = new Map(results.map((r) => [r.studentId, r]));
+        if (examGroup && scope === "group") {
+          const results = await createGroupMappings(examGroup.id, payload);
+          const byId = new Map(results.map((r) => [r.studentId, r]));
 
-        setAssignments((prev) =>
-          prev.map((a) => {
-            const result = byId.get(a.studentId);
-            if (!result) return a;
-            return result.ok
-              ? { ...a, status: "created" }
-              : { ...a, status: "error", error: result.error };
-          }),
-        );
+          setAssignments((prev) =>
+            prev.map((a) => {
+              const result = byId.get(a.studentId);
+              if (!result) return a;
+              const okCount = result.results.filter((r) => r.ok).length;
+              const status = okCount === result.results.length ? "created" : okCount === 0 ? "error" : "partial";
+              return {
+                ...a,
+                status,
+                groupResults: result.results,
+                error: status === "error" ? result.results[0]?.error : undefined,
+              };
+            }),
+          );
 
-        if (results.every((r) => r.ok)) {
-          router.refresh();
+          if (results.every((r) => r.results.every((row) => row.ok))) {
+            router.refresh();
+          }
+        } else {
+          const results = await createMappings(examId, payload);
+          const byId = new Map(results.map((r) => [r.studentId, r]));
+
+          setAssignments((prev) =>
+            prev.map((a) => {
+              const result = byId.get(a.studentId);
+              if (!result) return a;
+              return result.ok
+                ? { ...a, status: "created" }
+                : { ...a, status: "error", error: result.error };
+            }),
+          );
+
+          if (results.every((r) => r.ok)) {
+            router.refresh();
+          }
         }
       } catch (err) {
         setReviewError(err instanceof Error ? err.message : "Something went wrong unexpectedly.");
@@ -261,8 +317,19 @@ export function MappingBuilder({
     <div className="flex flex-col gap-6">
       {existingMappings.length > 0 && (
         <details className="rounded-lg border border-border bg-white p-4">
-          <summary className="cursor-pointer text-sm font-semibold text-charcoal">
-            Already mapped ({existingMappings.length})
+          <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold text-charcoal">
+            <span>Already mapped ({existingMappings.length})</span>
+            {isSchool && (
+              <Link
+                href={`/admin/exams/${examId}/mapping/print-all`}
+                target="_blank"
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-1.5 text-xs font-semibold text-accent hover:text-accent-hover"
+              >
+                <Printer className="size-3.5" strokeWidth={2} />
+                Print all hall tickets
+              </Link>
+            )}
           </summary>
           <div className="mt-3 overflow-x-auto">
             <table className="w-full min-w-[28rem] text-sm">
@@ -273,6 +340,18 @@ export function MappingBuilder({
                     <td className="py-1.5 text-charcoal">{m.fullName}</td>
                     <td className="py-1.5 text-slate">{m.hallLabel}</td>
                     <td className="py-1.5 font-mono text-slate">Seat {m.seatNumber}</td>
+                    {isSchool && (
+                      <td className="py-1.5 text-right">
+                        <Link
+                          href={`/admin/exams/${examId}/mapping/print/${m.id}`}
+                          target="_blank"
+                          className="flex items-center gap-1 text-xs font-semibold text-accent hover:text-accent-hover"
+                        >
+                          <Printer className="size-3.5" strokeWidth={2} />
+                          Print
+                        </Link>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -283,6 +362,52 @@ export function MappingBuilder({
 
       {mode === "select" && (
         <>
+          {examGroup && (
+            <div className="rounded-lg border border-border bg-white p-5">
+              <h2 className="text-sm font-semibold text-charcoal">Map to</h2>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <label
+                  className={`flex flex-1 cursor-pointer items-start gap-2 rounded-lg border px-3 py-2.5 text-sm ${
+                    scope === "exam" ? "border-accent bg-accent-tint" : "border-border"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="mapping-scope"
+                    checked={scope === "exam"}
+                    onChange={() => changeScope("exam")}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="block font-semibold text-charcoal">This exam only</span>
+                    <span className="block text-xs text-slate">Just this course&rsquo;s mapping.</span>
+                  </span>
+                </label>
+                <label
+                  className={`flex flex-1 cursor-pointer items-start gap-2 rounded-lg border px-3 py-2.5 text-sm ${
+                    scope === "group" ? "border-accent bg-accent-tint" : "border-border"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="mapping-scope"
+                    checked={scope === "group"}
+                    onChange={() => changeScope("group")}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="block font-semibold text-charcoal">
+                      Entire group — {examGroup.name}
+                    </span>
+                    <span className="block text-xs text-slate">
+                      Same hall/seat across all {examGroup.exams.length} exams in this group.
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </div>
+          )}
+
           <div className="rounded-lg border border-border bg-white p-5">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-sm font-semibold text-charcoal">
@@ -334,7 +459,8 @@ export function MappingBuilder({
             <div className="mt-3 max-h-72 overflow-auto rounded-lg border border-border">
               {filteredStudents.length === 0 ? (
                 <p className="p-4 text-center text-sm text-slate">
-                  No unmapped students{department !== "all" ? " in this department" : ""}.
+                  No students left to map{scope === "group" ? " across this group" : ""}
+                  {department !== "all" ? " in this department" : ""}.
                 </p>
               ) : (
                 <table className="w-full text-sm">
@@ -412,9 +538,16 @@ export function MappingBuilder({
       {mode === "review" && (
         <div className="rounded-lg border border-border bg-white">
           <div className="flex items-center justify-between border-b border-border px-5 py-3">
-            <h2 className="text-sm font-semibold text-charcoal">
-              3. Review &amp; confirm ({assignments.length})
-            </h2>
+            <div>
+              <h2 className="text-sm font-semibold text-charcoal">
+                3. Review &amp; confirm ({assignments.length})
+              </h2>
+              {examGroup && scope === "group" && (
+                <p className="text-xs text-slate">
+                  Each row maps to all {examGroup.exams.length} exams in {examGroup.name}.
+                </p>
+              )}
+            </div>
             <button
               onClick={() => setMode("select")}
               className="text-sm font-semibold text-accent hover:text-accent-hover"
@@ -449,7 +582,9 @@ export function MappingBuilder({
                         ? "border-b border-border bg-verified-tint last:border-0"
                         : a.status === "error"
                           ? "border-b border-border bg-alert-tint last:border-0"
-                          : "border-b border-border last:border-0"
+                          : a.status === "partial"
+                            ? "border-b border-border bg-pending-tint last:border-0"
+                            : "border-b border-border last:border-0"
                     }
                   >
                     <td className="px-4 py-2">
@@ -482,9 +617,26 @@ export function MappingBuilder({
                       />
                     </td>
                     <td className="px-4 py-2">
-                      {a.status === "created" && <span className="text-verified">Created</span>}
+                      {a.status === "created" && (
+                        <span className="text-verified">
+                          {a.groupResults ? `Created (${a.groupResults.length}/${a.groupResults.length})` : "Created"}
+                        </span>
+                      )}
                       {a.status === "error" && <span className="text-alert">{a.error}</span>}
                       {a.status === "pending" && <span className="text-slate">Pending</span>}
+                      {a.status === "partial" && a.groupResults && (
+                        <span className="text-pending">
+                          <span className="block font-semibold">
+                            {a.groupResults.filter((r) => r.ok).length}/{a.groupResults.length} created
+                          </span>
+                          <span className="block text-xs">
+                            {a.groupResults
+                              .filter((r) => !r.ok)
+                              .map((r) => `${r.courseCode}: ${r.error}`)
+                              .join(" · ")}
+                          </span>
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-2">
                       {a.status !== "created" && (

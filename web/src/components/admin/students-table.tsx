@@ -10,7 +10,7 @@ type Student = {
   id: string;
   rollNumber: string;
   fullName: string;
-  email: string;
+  email: string | null;
   department: string;
   isActive: boolean;
   photoUrl: string | null;
@@ -311,7 +311,7 @@ export function StudentsTable({
                       <>
                         <td className="px-4 py-2 font-mono text-charcoal">{s.rollNumber}</td>
                         <td className="max-w-[16rem] truncate px-4 py-2 text-charcoal">{s.fullName}</td>
-                        <td className="max-w-[16rem] truncate px-4 py-2 text-charcoal">{s.email}</td>
+                        <td className="max-w-[16rem] truncate px-4 py-2 text-charcoal">{s.email || "—"}</td>
                         <td className="px-4 py-2 text-charcoal">{s.department}</td>
                       </>
                     )}

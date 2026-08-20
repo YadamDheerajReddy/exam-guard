@@ -31,19 +31,24 @@ type ExamDefaults = {
   startTime: string;
   endTime: string;
   revealThresholdMinutes: number;
+  examGroupId?: string | null;
 };
+
+export type ExamGroupOption = { id: string; name: string };
 
 export function ExamForm({
   timeZone,
   action = createExam,
   submitLabel = "Create exam",
   defaultValues,
+  examGroups,
   onDone,
 }: {
   timeZone: string;
   action?: (state: ExamFormState, formData: FormData) => Promise<ExamFormState>;
   submitLabel?: string;
   defaultValues?: ExamDefaults;
+  examGroups: ExamGroupOption[];
   onDone?: () => void;
 }) {
   const [state, formAction, pending] = useActionState(
@@ -103,6 +108,25 @@ export function ExamForm({
           defaultValue={defaultValues?.endTime}
           className="rounded-lg border border-border px-3 py-2 text-sm text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint"
         />
+      </div>
+
+      <div className="sm:col-span-2 flex flex-col gap-1.5">
+        <label htmlFor="examGroupId" className="text-sm font-semibold text-charcoal">
+          Exam group (optional)
+        </label>
+        <select
+          id="examGroupId"
+          name="examGroupId"
+          defaultValue={defaultValues?.examGroupId ?? ""}
+          className="w-full rounded-lg border border-border px-3 py-2 text-sm text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint sm:w-auto"
+        >
+          <option value="">No group — standalone exam</option>
+          {examGroups.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="sm:col-span-2 flex flex-col gap-1.5">

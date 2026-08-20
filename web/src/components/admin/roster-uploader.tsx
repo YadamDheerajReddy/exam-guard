@@ -27,8 +27,6 @@ type Entry = {
   existingStudentId?: string;
 };
 
-const REQUIRED_COLUMNS: (keyof RosterRow)[] = ["rollNumber", "fullName", "email", "department"];
-
 const emptyRow = (): RosterRow => ({
   rollNumber: "",
   fullName: "",
@@ -40,6 +38,11 @@ const emptyRow = (): RosterRow => ({
 export function RosterUploader({ isSchool = false }: { isSchool?: boolean }) {
   const fieldLabel = isSchool ? "class" : "department";
   const fieldLabelTitle = isSchool ? "Class" : "Department";
+  // Many school students have no email at all — everything else stays
+  // required for every org type.
+  const requiredColumns: (keyof RosterRow)[] = isSchool
+    ? ["rollNumber", "fullName", "department"]
+    : ["rollNumber", "fullName", "email", "department"];
   const [entries, setEntries] = useState<Entry[]>([]);
   const [submissions, setSubmissions] = useState<Map<number, Submission>>(new Map());
   const [photos, setPhotos] = useState<Map<number, PhotoState>>(new Map());
@@ -59,12 +62,12 @@ export function RosterUploader({ isSchool = false }: { isSchool?: boolean }) {
   // search result never carried an email to begin with).
   const validated = useMemo(() => {
     const newRows = entries.filter((e) => e.kind === "new").map((e) => e.row);
-    const newValidated = validateRosterRows(newRows, fieldLabel);
+    const newValidated = validateRosterRows(newRows, fieldLabel, !isSchool);
     let i = 0;
     return entries.map((e) =>
       e.kind === "existing" ? { ...e.row, error: null } : newValidated[i++],
     );
-  }, [entries, fieldLabel]);
+  }, [entries, fieldLabel, isSchool]);
 
   const rows = entries.map((entry, i) => ({
     entry,
@@ -100,10 +103,10 @@ export function RosterUploader({ isSchool = false }: { isSchool?: boolean }) {
           .map((f) => normalizeHeader(f))
           .filter((f): f is keyof RosterRow => f !== null);
 
-        const missing = REQUIRED_COLUMNS.filter((c) => !mapped.includes(c));
+        const missing = requiredColumns.filter((c) => !mapped.includes(c));
         if (missing.length > 0) {
           setParseError(
-            `Missing required column(s): ${missing.join(", ")}. Expected headers: roll_number, full_name, email, ${fieldLabel} (photo_url optional).`,
+            `Missing required column(s): ${missing.join(", ")}. Expected headers: roll_number, full_name, ${isSchool ? "" : "email, "}${fieldLabel}${isSchool ? ", email (optional)" : ""}, photo_url (optional).`,
           );
           return;
         }
@@ -128,7 +131,7 @@ export function RosterUploader({ isSchool = false }: { isSchool?: boolean }) {
     if (
       !manualRow.rollNumber.trim() ||
       !manualRow.fullName.trim() ||
-      !manualRow.email.trim() ||
+      (!isSchool && !manualRow.email.trim()) ||
       !manualRow.department.trim()
     ) {
       return;
@@ -314,7 +317,9 @@ export function RosterUploader({ isSchool = false }: { isSchool?: boolean }) {
         <div className="rounded-lg border border-border bg-white p-5">
           <h2 className="text-sm font-semibold text-charcoal">Upload a CSV</h2>
           <p className="mt-1 text-sm text-slate">
-            Columns: roll_number, full_name, email, {fieldLabel}, photo_url (optional).
+            {isSchool
+              ? `Columns: roll_number, full_name, ${fieldLabel}, photo_url and email (both optional).`
+              : `Columns: roll_number, full_name, email, ${fieldLabel}, photo_url (optional).`}
           </p>
           <input
             ref={fileInputRef}
@@ -351,7 +356,7 @@ export function RosterUploader({ isSchool = false }: { isSchool?: boolean }) {
             <input
               value={manualRow.email}
               onChange={(e) => setManualRow({ ...manualRow, email: e.target.value })}
-              placeholder="Email"
+              placeholder={isSchool ? "Email (optional)" : "Email"}
               type="email"
               className="rounded-lg border border-border px-3 py-1.5 text-sm text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint"
             />
@@ -485,7 +490,7 @@ export function RosterUploader({ isSchool = false }: { isSchool?: boolean }) {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-2 text-charcoal">{r.entry.row.email}</td>
+                      <td className="px-4 py-2 text-charcoal">{r.entry.row.email || "—"}</td>
                       <td className="px-4 py-2 text-charcoal">{r.entry.row.department}</td>
                       <td className="px-4 py-2">
                         {photoStudentId ? (

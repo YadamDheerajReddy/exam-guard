@@ -4,16 +4,40 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { dayLabel } from "@/lib/day-label";
 import { type ExamStatus } from "@/lib/reveal";
-import { CalendarClock, ChevronRight, ClipboardList, QrCode, Sparkles } from "lucide-react";
+import { CalendarClock, ChevronRight, ClipboardList, Layers, QrCode, Sparkles } from "lucide-react";
 
-export type StudentExam = {
-  examId: string;
-  courseCode: string;
-  courseTitle: string;
-  examDate: string;
-  startTime: string;
-  status: ExamStatus;
-};
+export type StudentScheduleItem =
+  | {
+      kind: "exam";
+      examId: string;
+      courseCode: string;
+      courseTitle: string;
+      examDate: string;
+      startTime: string;
+      status: ExamStatus;
+    }
+  | {
+      kind: "group";
+      groupId: string;
+      groupName: string;
+      examCount: number;
+      examDate: string;
+      startTime: string;
+      status: ExamStatus;
+    };
+
+function itemId(item: StudentScheduleItem) {
+  return item.kind === "exam" ? item.examId : item.groupId;
+}
+function itemHref(item: StudentScheduleItem) {
+  return item.kind === "exam" ? `/student/exams/${item.examId}` : `/student/exam-groups/${item.groupId}`;
+}
+function itemTitle(item: StudentScheduleItem) {
+  return item.kind === "exam" ? item.courseCode : item.groupName;
+}
+function itemSubtitle(item: StudentScheduleItem) {
+  return item.kind === "exam" ? item.courseTitle : `${item.examCount} exam${item.examCount === 1 ? "" : "s"}`;
+}
 
 const STATUS_LABEL: Record<ExamStatus, string> = {
   upcoming: "Upcoming",
@@ -36,7 +60,7 @@ const item = {
   show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] as const } },
 };
 
-export function StudentDashboard({ fullName, exams }: { fullName: string; exams: StudentExam[] }) {
+export function StudentDashboard({ fullName, exams }: { fullName: string; exams: StudentScheduleItem[] }) {
   const firstName = fullName.trim().split(/\s+/)[0] ?? fullName;
   const active = exams.filter((e) => e.status !== "completed");
   const completed = exams.filter((e) => e.status === "completed");
@@ -49,7 +73,7 @@ export function StudentDashboard({ fullName, exams }: { fullName: string; exams:
   // completed exam from last week sorts (chronologically) above one coming
   // up next month, which buries the thing the student actually needs.
   const rest = exams
-    .filter((e) => e.examId !== featured?.examId)
+    .filter((e) => (featured ? itemId(e) !== itemId(featured) : true))
     .sort((a, b) => Number(a.status === "completed") - Number(b.status === "completed"));
 
   return (
@@ -81,15 +105,19 @@ export function StudentDashboard({ fullName, exams }: { fullName: string; exams:
               transition={{ duration: 0.4, delay: 0.05, ease: [0.16, 1, 0.3, 1] }}
             >
               <Link
-                href={`/student/exams/${featured.examId}`}
+                href={itemHref(featured)}
                 className="mt-6 block overflow-hidden rounded-2xl bg-gradient-to-br from-[#122c56] via-accent to-[#0d7ce0] p-6 text-white shadow-lg transition-transform hover:-translate-y-0.5"
               >
                 <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-white/70">
-                  <Sparkles className="size-3.5" strokeWidth={2} />
+                  {featured.kind === "group" ? (
+                    <Layers className="size-3.5" strokeWidth={2} />
+                  ) : (
+                    <Sparkles className="size-3.5" strokeWidth={2} />
+                  )}
                   {featured.status === "pass-ready" ? "Your pass is ready" : "Up next"}
                 </div>
-                <p className="mt-2 text-2xl font-extrabold">{featured.courseCode}</p>
-                <p className="text-sm text-white/85">{featured.courseTitle}</p>
+                <p className="mt-2 text-2xl font-extrabold">{itemTitle(featured)}</p>
+                <p className="text-sm text-white/85">{itemSubtitle(featured)}</p>
                 <div className="mt-4 flex items-center justify-between">
                   <p className="flex items-center gap-1.5 text-xs text-white/75">
                     <CalendarClock className="size-3.5 shrink-0" strokeWidth={2} />
@@ -109,14 +137,17 @@ export function StudentDashboard({ fullName, exams }: { fullName: string; exams:
               {rest.map((exam) => {
                 const day = dayLabel(exam.examDate);
                 return (
-                  <motion.div key={exam.examId} variants={item}>
+                  <motion.div key={itemId(exam)} variants={item}>
                     <Link
-                      href={`/student/exams/${exam.examId}`}
+                      href={itemHref(exam)}
                       className="flex items-center justify-between gap-3 rounded-lg border border-border bg-white p-5 transition-all hover:-translate-y-0.5 hover:border-accent hover:shadow-sm"
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-bold text-ink">{exam.courseCode}</p>
-                        <p className="truncate text-sm text-slate">{exam.courseTitle}</p>
+                        <p className="flex items-center gap-1.5 truncate text-sm font-bold text-ink">
+                          {exam.kind === "group" && <Layers className="size-3.5 shrink-0 text-slate" strokeWidth={2} />}
+                          {itemTitle(exam)}
+                        </p>
+                        <p className="truncate text-sm text-slate">{itemSubtitle(exam)}</p>
                         <p className="mt-1 flex items-center gap-1.5 text-xs text-slate">
                           <CalendarClock className="size-3.5 shrink-0" strokeWidth={2} />
                           {exam.examDate} · {exam.startTime}

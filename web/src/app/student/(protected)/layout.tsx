@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentStudent } from "@/lib/student-context";
 import { studentLogout } from "../actions";
 import { Logo } from "@/components/logo";
@@ -23,11 +24,32 @@ export default async function ProtectedStudentLayout({
     redirect("/student/change-password");
   }
 
+  // org-logos is a private bucket with no storage.objects policies (same
+  // pattern as the admin console header) — signing always goes through the
+  // service-role client, never the student's own session.
+  const service = createAdminClient();
+  const { data: org } = await service
+    .from("organizations")
+    .select("logo_url")
+    .eq("id", student.organizationId)
+    .maybeSingle();
+
+  let orgLogoUrl: string | null = null;
+  if (org?.logo_url) {
+    const { data: signed } = await service.storage.from("org-logos").createSignedUrl(org.logo_url, 300);
+    orgLogoUrl = signed?.signedUrl ?? null;
+  }
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center justify-between gap-4 border-b border-border bg-white px-4 py-4 print:hidden sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
-          <Logo size={22} withWordmark={false} />
+          {orgLogoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- signed Supabase Storage URL
+            <img src={orgLogoUrl} alt="" className="size-[22px] shrink-0 rounded object-contain" />
+          ) : (
+            <Logo size={22} withWordmark={false} />
+          )}
           <div className="min-w-0">
             <p className="truncate text-sm font-bold text-ink">{student.fullName}</p>
             <p className="truncate text-xs font-mono text-slate">{student.rollNumber}</p>

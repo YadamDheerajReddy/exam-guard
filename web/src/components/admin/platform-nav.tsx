@@ -2,11 +2,23 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building } from "lucide-react";
+import { Building, MessageSquare } from "lucide-react";
 
-const links = [{ href: "/admin/organizations", label: "Organizations", icon: Building }];
+const links = [
+  { href: "/admin/organizations", label: "Organizations", icon: Building },
+  { href: "/admin/change-requests", label: "Change Requests", icon: MessageSquare },
+];
 
-export function PlatformNav() {
+function NavBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="ml-auto flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-alert px-1.5 text-[10px] font-bold text-white">
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
+export function PlatformNav({ changeRequestsCount = 0 }: { changeRequestsCount?: number }) {
   const pathname = usePathname();
 
   return (
@@ -25,6 +37,7 @@ export function PlatformNav() {
           >
             <Icon className="size-4 shrink-0" strokeWidth={2} />
             <span className="truncate">{link.label}</span>
+            {link.href === "/admin/change-requests" && <NavBadge count={changeRequestsCount} />}
           </Link>
         );
       })}

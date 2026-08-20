@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
+import { Image, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useSession } from "@/context/session-context";
@@ -43,7 +43,11 @@ export default function HomeScreen() {
       <SyncStatusBar />
       <View style={styles.header}>
         <View style={styles.headerRow}>
-          <Logo size={20} withWordmark={false} />
+          {invigilator.orgLogoUrl ? (
+            <Image source={{ uri: invigilator.orgLogoUrl }} style={styles.orgLogo} resizeMode="contain" />
+          ) : (
+            <Logo size={20} withWordmark={false} />
+          )}
           <View>
             <Text style={styles.title}>Invigilator Scanner</Text>
             <Text style={styles.subtitle}>Welcome, {invigilator.fullName}</Text>
@@ -150,6 +154,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
+  orgLogo: { width: 20, height: 20, borderRadius: 4 },
   title: { fontSize: 18, fontWeight: "700", color: Colors.ink },
   h2: { fontSize: 16, fontWeight: "700", color: Colors.ink, marginBottom: 12 },
   subtitle: { marginTop: 2, fontSize: 13, color: Colors.slate },

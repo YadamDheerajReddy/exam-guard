@@ -24,12 +24,18 @@ export default async function PlatformAdminLayout({
     redirect("/admin");
   }
 
+  const supabase = await createClient();
+  const { count: pendingChangeRequests } = await supabase
+    .from("change_requests")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "PENDING");
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center justify-between gap-4 border-b border-border bg-white px-4 py-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <MobileSidebar>
-            <PlatformNav />
+            <PlatformNav changeRequestsCount={pendingChangeRequests ?? 0} />
           </MobileSidebar>
           <Logo size={22} withWordmark={false} />
           <div className="min-w-0">
@@ -47,7 +53,7 @@ export default async function PlatformAdminLayout({
 
       <div className="flex flex-1">
         <aside className="hidden w-56 shrink-0 border-r border-border bg-white px-3 py-6 md:block">
-          <PlatformNav />
+          <PlatformNav changeRequestsCount={pendingChangeRequests ?? 0} />
         </aside>
         <main className="min-w-0 flex-1 bg-surface px-4 py-6 sm:px-6 md:px-8 md:py-8">{children}</main>
       </div>

@@ -124,13 +124,18 @@ export async function requestStudentPasswordReset(
       ).data
     : null;
 
-  if (!student || !student.is_active) {
+  if (!student || !student.is_active || !student.email) {
+    // No email on file (school students often have none) means there's
+    // nowhere to send a link — minting a token anyway would just burn this
+    // student's rate-limit budget on a request that can never be
+    // fulfilled. Same generic message either way, so this isn't a new
+    // enumeration signal.
     return { message: RESET_REQUESTED_MESSAGE };
   }
 
-  // Caps outstanding requests per student in a rolling window — without
-  // this, repeatedly posting a known roll number would be a free way to
-  // spam that student's real inbox, since neither input above is secret.
+  // Rate-limit even legitimate requests — without this, repeatedly posting
+  // a known roll number would be a free way to spam that student's real
+  // inbox, since neither input above is secret.
   const windowStart = new Date(Date.now() - RESET_REQUEST_WINDOW_MS).toISOString();
   const { count: recentCount } = await service
     .from("password_reset_tokens")

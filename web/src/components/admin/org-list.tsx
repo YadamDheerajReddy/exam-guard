@@ -2,7 +2,14 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
-import { setOrganizationSuspended } from "@/app/admin/(protected)/(platform)/organizations/actions";
+import {
+  setOrganizationSuspended,
+  addOrgAdmin,
+  updateOrganizationDetails,
+  deleteOrgAdmin,
+  resetOrgAdminPassword,
+} from "@/app/admin/(protected)/(platform)/organizations/actions";
+import { MAX_ADMINS_PER_ORG } from "@/lib/admin-capacity";
 import { avatarColor, initials } from "@/lib/avatar-color";
 import {
   AlertCircle,
@@ -11,20 +18,30 @@ import {
   CheckCircle2,
   ChevronDown,
   GraduationCap,
+  KeyRound,
+  Pencil,
   Search,
   ShieldCheck,
+  Trash2,
   UserCog,
+  UserPlus,
 } from "lucide-react";
 
 export type Org = {
   id: string;
   name: string;
   type: string;
+  slug: string | null;
   isSuspended: boolean;
   createdAt: string;
-  admins: { fullName: string; email: string }[];
+  admins: { id: string; fullName: string; email: string; role: string }[];
   studentCount: number;
   invigilatorCount: number;
+};
+
+const ADMIN_ROLE_LABEL: Record<string, string> = {
+  EXAM_STAFF: "Exam Staff",
+  AUDITOR: "Auditor",
 };
 
 type SortKey = "name" | "created" | "students";
@@ -199,25 +216,328 @@ function OrgRow({ org, expanded, onToggleExpand }: { org: Org; expanded: boolean
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             className="overflow-hidden"
           >
-            <div className="mx-4 mb-4 rounded-lg bg-surface p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate">Admins</p>
-              {org.admins.length === 0 ? (
-                <p className="mt-1.5 text-sm text-slate">No admins assigned.</p>
-              ) : (
-                <ul className="mt-1.5 flex flex-col gap-1">
-                  {org.admins.map((a) => (
-                    <li key={a.email} className="flex flex-wrap items-baseline gap-x-2 text-sm">
-                      <span className="font-semibold text-charcoal">{a.fullName}</span>
-                      <span className="text-slate">{a.email}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+            <div className="mx-4 mb-4 flex flex-col gap-4">
+              <div className="rounded-lg bg-surface p-4">
+                <OrgDetailsEditor organizationId={org.id} name={org.name} slug={org.slug} />
+              </div>
+
+              <div className="rounded-lg bg-surface p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate">
+                  Admins ({org.admins.length}/{MAX_ADMINS_PER_ORG})
+                </p>
+                {org.admins.length === 0 ? (
+                  <p className="mt-1.5 text-sm text-slate">No admins assigned.</p>
+                ) : (
+                  <ul className="mt-1.5 flex flex-col gap-1.5">
+                    {org.admins.map((a) => (
+                      <AdminRow key={a.id} organizationId={org.id} admin={a} canDelete={org.admins.length > 1} />
+                    ))}
+                  </ul>
+                )}
+
+                <AddAdminForm organizationId={org.id} atCapacity={org.admins.length >= MAX_ADMINS_PER_ORG} />
+              </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
     </motion.li>
+  );
+}
+
+function OrgDetailsEditor({ organizationId, name, slug }: { organizationId: string; name: string; slug: string | null }) {
+  const [open, setOpen] = useState(false);
+  const [nameInput, setNameInput] = useState(name);
+  const [slugInput, setSlugInput] = useState(slug ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function handleSave() {
+    setError(null);
+    if (!nameInput.trim()) {
+      setError("Organization name is required.");
+      return;
+    }
+    const formData = new FormData();
+    formData.set("name", nameInput.trim());
+    formData.set("slug", slugInput.trim());
+
+    startTransition(async () => {
+      const result = await updateOrganizationDetails(organizationId, formData);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setNotice(
+        result.migratedStudents
+          ? `Saved — updated the login email for ${result.migratedStudents} student${result.migratedStudents === 1 ? "" : "s"}.`
+          : "Saved.",
+      );
+      setOpen(false);
+    });
+  }
+
+  if (!open) {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-sm">
+          <span className="font-semibold text-charcoal">{name}</span>
+          <span className="ml-2 text-xs text-slate">
+            Organization ID: <span className="font-mono">{slug ?? "not set"}</span>
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          {notice && <span className="text-xs font-semibold text-verified">{notice}</span>}
+          <button
+            type="button"
+            onClick={() => {
+              setNameInput(name);
+              setSlugInput(slug ?? "");
+              setNotice(null);
+              setOpen(true);
+            }}
+            className="flex items-center gap-1.5 text-xs font-semibold text-accent hover:text-accent-hover"
+          >
+            <Pencil className="size-3.5" strokeWidth={2} />
+            Edit
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <label className="flex-1 text-xs text-slate">
+          Name
+          <input
+            value={nameInput}
+            onChange={(e) => setNameInput(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-border px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint"
+          />
+        </label>
+        <label className="flex-1 text-xs text-slate">
+          Organization ID
+          <input
+            value={slugInput}
+            onChange={(e) => setSlugInput(e.target.value)}
+            placeholder="e.g. crimson-hyderabad"
+            className="mt-1 w-full rounded-lg border border-border px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint"
+          />
+        </label>
+      </div>
+      <p className="text-xs text-slate">
+        Changing the Organization ID automatically updates every existing student&apos;s login so they aren&apos;t
+        locked out.
+      </p>
+      {error && <p className="text-xs text-alert">{error}</p>}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={pending}
+          className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
+        >
+          {pending ? "Saving…" : "Save"}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="text-xs font-semibold text-slate">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AdminRow({
+  organizationId,
+  admin,
+  canDelete,
+}: {
+  organizationId: string;
+  admin: { id: string; fullName: string; email: string; role: string };
+  canDelete: boolean;
+}) {
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [resetDone, setResetDone] = useState(false);
+  const [deleted, setDeleted] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  function handleReset() {
+    setError(null);
+    startTransition(async () => {
+      const result = await resetOrgAdminPassword(organizationId, admin.id);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setResetDone(true);
+    });
+  }
+
+  function handleDelete() {
+    setError(null);
+    startTransition(async () => {
+      const result = await deleteOrgAdmin(organizationId, admin.id);
+      if (result.error) {
+        setError(result.error);
+        setConfirmingDelete(false);
+        return;
+      }
+      setDeleted(true);
+    });
+  }
+
+  if (deleted) return null;
+
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-sm">
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <span className="font-semibold text-charcoal">{admin.fullName}</span>
+        <span className="text-slate">{admin.email}</span>
+        <span className="text-xs text-slate">· {ADMIN_ROLE_LABEL[admin.role] ?? admin.role}</span>
+        {error && <span className="text-xs text-alert">{error}</span>}
+      </div>
+      <div className="flex items-center gap-3">
+        {resetDone ? (
+          <span className="text-xs font-semibold text-verified">Reset email sent.</span>
+        ) : (
+          <button
+            type="button"
+            onClick={handleReset}
+            disabled={pending}
+            className="flex items-center gap-1 text-xs font-semibold text-accent hover:text-accent-hover disabled:opacity-60"
+          >
+            <KeyRound className="size-3.5" strokeWidth={2} />
+            Reset password
+          </button>
+        )}
+        {canDelete &&
+          (confirmingDelete ? (
+            <span className="flex items-center gap-2 text-xs">
+              <span className="text-slate">Delete?</span>
+              <button type="button" onClick={handleDelete} disabled={pending} className="font-semibold text-alert disabled:opacity-60">
+                {pending ? "Deleting…" : "Yes"}
+              </button>
+              <button type="button" onClick={() => setConfirmingDelete(false)} className="font-semibold text-slate">
+                Cancel
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(true)}
+              className="flex items-center gap-1 text-xs font-semibold text-alert hover:opacity-80"
+            >
+              <Trash2 className="size-3.5" strokeWidth={2} />
+              Delete
+            </button>
+          ))}
+      </div>
+    </li>
+  );
+}
+
+function AddAdminForm({ organizationId, atCapacity }: { organizationId: string; atCapacity: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("EXAM_STAFF");
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  if (atCapacity) {
+    return <p className="mt-3 text-xs text-slate">This organization has reached the maximum of {MAX_ADMINS_PER_ORG} admins.</p>;
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-accent hover:text-accent-hover"
+      >
+        <UserPlus className="size-3.5" strokeWidth={2} />
+        Add admin
+      </button>
+    );
+  }
+
+  function handleSubmit() {
+    setError(null);
+    if (!fullName.trim() || !email.trim()) {
+      setError("Name and email are required.");
+      return;
+    }
+    const formData = new FormData();
+    formData.set("fullName", fullName.trim());
+    formData.set("email", email.trim());
+    formData.set("role", role);
+
+    startTransition(async () => {
+      const result = await addOrgAdmin(organizationId, formData);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setFullName("");
+      setEmail("");
+      setRole("EXAM_STAFF");
+      setDone(true);
+    });
+  }
+
+  return (
+    <div className="mt-3 flex flex-col gap-2 rounded-lg border border-border bg-white p-3">
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <input
+          value={fullName}
+          onChange={(e) => setFullName(e.target.value)}
+          placeholder="Full name"
+          className="flex-1 rounded-lg border border-border px-2.5 py-1.5 text-xs text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint"
+        />
+        <input
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          type="email"
+          placeholder="Email"
+          className="flex-1 rounded-lg border border-border px-2.5 py-1.5 text-xs text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint"
+        />
+        <select
+          value={role}
+          onChange={(e) => setRole(e.target.value)}
+          className="rounded-lg border border-border px-2.5 py-1.5 text-xs text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent-tint"
+        >
+          <option value="EXAM_STAFF">Exam Staff</option>
+          <option value="AUDITOR">Auditor</option>
+        </select>
+      </div>
+      {error && <p className="text-xs text-alert">{error}</p>}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={pending}
+          className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
+        >
+          {pending ? "Adding…" : "Add admin"}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(false);
+            setError(null);
+          }}
+          className="text-xs font-semibold text-slate"
+        >
+          Cancel
+        </button>
+        {done && <span className="text-xs font-semibold text-verified">Admin added.</span>}
+      </div>
+    </div>
   );
 }
 

@@ -138,6 +138,41 @@ export function orgAdminCreatedEmail({
   };
 }
 
+export function orgAdminPasswordResetEmail({
+  orgName,
+  fullName,
+  email,
+  tempPassword,
+  loginUrl,
+}: {
+  orgName: string;
+  fullName: string;
+  email: string;
+  tempPassword: string;
+  loginUrl: string;
+}) {
+  return {
+    subject: `Your ExamGuard admin password for ${orgName} was reset`,
+    html: shell(
+      "Your password was reset",
+      `
+        <p style="font-size: 14px; line-height: 1.6;">Hi ${fullName},</p>
+        <p style="font-size: 14px; line-height: 1.6;">
+          An ExamGuard super admin reset your admin password for <strong>${orgName}</strong>. Use this temporary
+          password to sign in — you'll be asked to set a new one immediately.
+        </p>
+        ${credentialBlock([
+          { label: "Login email", value: email },
+          { label: "Temporary password", value: tempPassword },
+        ])}
+        <p style="font-size: 14px; line-height: 1.6;">
+          <a href="${loginUrl}" style="color: #1a3c6e; font-weight: 600;">Sign in to the Admin Console →</a>
+        </p>
+      `,
+    ),
+  };
+}
+
 export function studentCreatedEmail({
   orgName,
   fullName,

@@ -40,12 +40,21 @@ export async function uploadRoster(
     return { rowResults: [], existingAdded: 0 };
   }
 
+  const service = createAdminClient();
+
+  const { data: org } = await service
+    .from("organizations")
+    .select("name, slug, type")
+    .eq("id", admin.organizationId)
+    .single();
+  const isSchool = org?.type === "SCHOOL";
+
   // Re-validate server-side — never trust the client's pre-check alone.
   // validateRosterRows works on plain rows and knows nothing about the
   // caller's correlation ids, so zip rowNumber back on positionally
   // (it doesn't reorder or drop rows) rather than trying to read it off
   // its output.
-  const revalidated = validateRosterRows(rows);
+  const revalidated = validateRosterRows(rows, isSchool ? "class" : "department", !isSchool);
   const rowResults: RosterUploadResult[] = [];
   const clean: (RosterRow & { rowNumber: number })[] = [];
   revalidated.forEach((row, i) => {
@@ -55,14 +64,6 @@ export async function uploadRoster(
     }
     clean.push({ ...row, rowNumber: rows[i].rowNumber });
   });
-
-  const service = createAdminClient();
-
-  const { data: org } = await service
-    .from("organizations")
-    .select("name, slug")
-    .eq("id", admin.organizationId)
-    .single();
 
   if (!org?.slug) {
     const blockedError =
@@ -86,15 +87,20 @@ export async function uploadRoster(
     // interpolating untrusted values into a raw PostgREST filter string is
     // an injection risk if a cell contains a comma, paren, or quote.
     // Roll number is only unique within this org; email is unique platform-wide.
+    // Blank emails are excluded from the lookup entirely — school rows with
+    // no email at all aren't "duplicates" of one another (NULL never
+    // collides with NULL under the DB's UNIQUE constraint either).
     const rollNumbers = clean.map((r) => r.rollNumber);
-    const emails = clean.map((r) => r.email);
+    const emails = clean.map((r) => r.email).filter((e) => e.length > 0);
     const [{ data: existingByRoll }, { data: existingByEmail }] = await Promise.all([
       service
         .from("students")
         .select("roll_number")
         .eq("organization_id", admin.organizationId)
         .in("roll_number", rollNumbers),
-      service.from("students").select("email").in("email", emails),
+      emails.length > 0
+        ? service.from("students").select("email").in("email", emails)
+        : Promise.resolve({ data: [] as { email: string | null }[] }),
     ]);
 
     const existingRolls = new Set(existingByRoll?.map((r) => r.roll_number) ?? []);
@@ -105,7 +111,7 @@ export async function uploadRoster(
         rowResults.push({ rowNumber: row.rowNumber, ok: false, error: "Roll number already exists." });
         continue;
       }
-      if (existingEmails.has(row.email)) {
+      if (row.email && existingEmails.has(row.email)) {
         rowResults.push({ rowNumber: row.rowNumber, ok: false, error: "Email already exists." });
         continue;
       }
@@ -123,7 +129,7 @@ export async function uploadRoster(
         id: created.userId,
         roll_number: row.rollNumber,
         full_name: row.fullName,
-        email: row.email,
+        email: row.email || null,
         department: row.department,
         photo_url: row.photoUrl || "",
         organization_id: admin.organizationId,
@@ -136,15 +142,21 @@ export async function uploadRoster(
         continue;
       }
 
-      const { subject, html } = studentCreatedEmail({
-        orgName: org.name,
-        fullName: row.fullName,
-        rollNumber: row.rollNumber,
-        organizationId: orgSlug,
-        tempPassword: created.tempPassword,
-        loginUrl: studentLoginUrl,
-      });
-      await sendMail({ to: row.email, subject, html });
+      // Schools typically have no email on file for a student at all, and
+      // per product decision this credential email is skipped for every
+      // school-org student regardless — the admin hands out temp passwords
+      // directly instead (see "Download credentials" on the roster page).
+      if (!isSchool && row.email) {
+        const { subject, html } = studentCreatedEmail({
+          orgName: org.name,
+          fullName: row.fullName,
+          rollNumber: row.rollNumber,
+          organizationId: orgSlug,
+          tempPassword: created.tempPassword,
+          loginUrl: studentLoginUrl,
+        });
+        await sendMail({ to: row.email, subject, html });
+      }
 
       rowResults.push({
         rowNumber: row.rowNumber,

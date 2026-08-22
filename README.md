@@ -159,7 +159,8 @@ npm run dev                   # → http://localhost:3000
 | `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public Supabase project credentials — safe to ship to the browser, RLS does the real gating |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-only, bypasses RLS — used sparingly, for genuinely privileged operations |
 | `BARCODE_TOKEN_SECRET` | Signs/verifies exam-pass tokens — generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
-| `GMAIL_USER` / `GMAIL_APP_PASSWORD` | Sends credential and password-reset emails via Gmail SMTP — optional in dev, emails are skipped with a warning if unset |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` | Sends credential and password-reset emails via any SMTP provider (Gmail App Password, Hostinger business email, etc.) — optional in dev, emails are skipped with a warning if unset |
+| `MAIL_FROM` | Optional override for the emails' `From:` header — defaults to `ExamGuard <SMTP_USER>` |
 
 **Mobile** (Invigilator Scanner):
 

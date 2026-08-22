@@ -327,3 +327,81 @@ export async function resetOrgAdminPassword(organizationId: string, adminId: str
   revalidatePath("/admin/organizations");
   return {};
 }
+
+// Full, permanent teardown of an organization and everything under it —
+// admins, students, invigilators, halls, exams, seat mappings, verification
+// logs, change/data-rights requests, roster-upload history, hall-ticket
+// templates, and every Storage file (logo, signatures, student photos).
+// Gated by typing the org's exact name (checked server-side, not just in
+// the UI) since this is irreversible and has no soft-delete/undo path —
+// unlike setOrganizationSuspended, which is the reversible "hold" option.
+export async function deleteOrganization(organizationId: string, confirmName: string): Promise<{ error?: string }> {
+  await requireSuperAdmin();
+  const service = createAdminClient();
+
+  const { data: org } = await service
+    .from("organizations")
+    .select("name, logo_url, hall_ticket_signature1_url, hall_ticket_signature2_url")
+    .eq("id", organizationId)
+    .maybeSingle();
+  if (!org) return { error: "Organization not found." };
+  if (confirmName.trim() !== org.name) {
+    return { error: "That doesn't match the organization's name — nothing was deleted." };
+  }
+
+  const [{ data: students }, { data: invigilators }, { data: admins }] = await Promise.all([
+    service.from("students").select("id, photo_url").eq("organization_id", organizationId),
+    service.from("invigilators").select("id").eq("organization_id", organizationId),
+    service.from("admins").select("id").eq("organization_id", organizationId),
+  ]);
+  const studentIds = (students ?? []).map((s) => s.id);
+  const invigilatorIds = (invigilators ?? []).map((i) => i.id);
+  const adminIds = (admins ?? []).map((a) => a.id);
+
+  const { data: mappings } = studentIds.length
+    ? await service.from("student_exam_mappings").select("id").in("student_id", studentIds)
+    : { data: [] };
+  const mappingIds = (mappings ?? []).map((m) => m.id);
+
+  // Tables with no cascade from admins/invigilators/mappings — clear first,
+  // same dependency order as a full-database wipe.
+  if (mappingIds.length) await service.from("verification_logs").delete().in("mapping_id", mappingIds);
+  if (invigilatorIds.length) await service.from("verification_logs").delete().in("invigilator_id", invigilatorIds);
+  await service.from("change_requests").delete().eq("organization_id", organizationId);
+  await service.from("data_rights_requests").delete().eq("organization_id", organizationId);
+  await service.from("roster_uploads").delete().eq("organization_id", organizationId);
+  await service.from("hall_ticket_templates").delete().eq("organization_id", organizationId);
+  if (studentIds.length) await service.from("student_exam_mappings").delete().in("student_id", studentIds);
+
+  // Deleting each auth user cascades away their admins/students/invigilators
+  // profile row automatically (all three have ON DELETE CASCADE from
+  // auth.users.id) — no separate profile-table deletes needed.
+  for (const id of [...studentIds, ...invigilatorIds, ...adminIds]) {
+    await service.auth.admin.deleteUser(id);
+  }
+
+  await service.from("exams").delete().eq("organization_id", organizationId);
+  await service.from("exam_groups").delete().eq("organization_id", organizationId);
+  await service.from("halls").delete().eq("organization_id", organizationId);
+
+  const { error: orgError } = await service.from("organizations").delete().eq("id", organizationId);
+  if (orgError) return { error: orgError.message };
+
+  const storagePaths: [string, string][] = [];
+  if (org.logo_url) storagePaths.push(["org-logos", org.logo_url]);
+  if (org.hall_ticket_signature1_url) storagePaths.push(["hall-ticket-signatures", org.hall_ticket_signature1_url]);
+  if (org.hall_ticket_signature2_url) storagePaths.push(["hall-ticket-signatures", org.hall_ticket_signature2_url]);
+  for (const student of students ?? []) {
+    if (student.photo_url) storagePaths.push(["student-photos", student.photo_url]);
+  }
+  const byBucket = new Map<string, string[]>();
+  for (const [bucket, path] of storagePaths) {
+    byBucket.set(bucket, [...(byBucket.get(bucket) ?? []), path]);
+  }
+  for (const [bucket, paths] of byBucket) {
+    await service.storage.from(bucket).remove(paths);
+  }
+
+  revalidatePath("/admin/organizations");
+  return {};
+}

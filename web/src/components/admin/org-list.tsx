@@ -8,6 +8,7 @@ import {
   updateOrganizationDetails,
   deleteOrgAdmin,
   resetOrgAdminPassword,
+  deleteOrganization,
 } from "@/app/admin/(protected)/(platform)/organizations/actions";
 import { MAX_ADMINS_PER_ORG } from "@/lib/admin-capacity";
 import { avatarColor, initials } from "@/lib/avatar-color";
@@ -237,6 +238,11 @@ function OrgRow({ org, expanded, onToggleExpand }: { org: Org; expanded: boolean
 
                 <AddAdminForm organizationId={org.id} atCapacity={org.admins.length >= MAX_ADMINS_PER_ORG} />
               </div>
+
+              <div className="rounded-lg border border-alert/30 bg-alert-tint/40 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-alert">Danger zone</p>
+                <DeleteOrgSection organizationId={org.id} orgName={org.name} />
+              </div>
             </div>
           </motion.div>
         )}
@@ -343,6 +349,78 @@ function OrgDetailsEditor({ organizationId, name, slug }: { organizationId: stri
           {pending ? "Saving…" : "Save"}
         </button>
         <button type="button" onClick={() => setOpen(false)} className="text-xs font-semibold text-slate">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DeleteOrgSection({ organizationId, orgName }: { organizationId: string; orgName: string }) {
+  const [open, setOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function handleDelete() {
+    setError(null);
+    startTransition(async () => {
+      const result = await deleteOrganization(organizationId, confirmText);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      // The org row unmounts on its own once revalidation removes it from
+      // the parent's list — nothing else to clean up here.
+    });
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-alert hover:opacity-80"
+      >
+        <Trash2 className="size-3.5" strokeWidth={2} />
+        Delete organization
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-1.5 flex flex-col gap-2">
+      <p className="text-xs text-alert">
+        This permanently deletes <span className="font-semibold">{orgName}</span> — every admin, student,
+        invigilator, hall, exam, and scan record. This cannot be undone.
+      </p>
+      <p className="text-xs text-charcoal">
+        Type <span className="font-mono font-semibold">{orgName}</span> to confirm.
+      </p>
+      <input
+        value={confirmText}
+        onChange={(e) => setConfirmText(e.target.value)}
+        className="rounded-lg border border-border bg-white px-2.5 py-1.5 text-xs text-ink outline-none focus:border-alert focus:ring-2 focus:ring-alert/30"
+      />
+      {error && <p className="text-xs text-alert">{error}</p>}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={pending || confirmText !== orgName}
+          className="rounded-lg bg-alert px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:opacity-90 disabled:opacity-50"
+        >
+          {pending ? "Deleting…" : "Permanently delete"}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(false);
+            setConfirmText("");
+            setError(null);
+          }}
+          className="text-xs font-semibold text-slate"
+        >
           Cancel
         </button>
       </div>

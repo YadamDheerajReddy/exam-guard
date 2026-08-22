@@ -3,7 +3,7 @@ import { Logo } from "@/components/logo";
 import { ShieldCheck } from "lucide-react";
 
 const LAST_UPDATED = "19 August 2026";
-const PLATFORM_CONTACT = process.env.GMAIL_USER ?? "privacy@examguard.internal";
+const PLATFORM_CONTACT = process.env.SMTP_USER ?? "privacy@examguard.internal";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
